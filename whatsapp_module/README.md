@@ -1,4 +1,13 @@
 
+  ____  ____  ____       __    __  __ __   ____  ______  _____  ____  ____  ____  
+ /    Tl    j|    \     |  T__T  T|  T  T /    T|      T/ ___/ /    T|    \|    \ 
+Y  o  | |  T |  D  )    |  |  |  ||  l  |Y  o  ||      (   \_ Y  o  ||  o  )  o  )
+|     | |  | |    /     |  |  |  ||  _  ||     |l_j  l_j\__  T|     ||   _/|   _/ 
+|  _  | |  | |    \     l  `  '  !|  |  ||  _  |  |  |  /  \ ||  _  ||  |  |  |   
+|  |  | j  l |  .  Y     \      / |  |  ||  |  |  |  |  \    ||  |  ||  |  |  |   
+l__j__j|____jl__j\_j      \_/\_/  l__j__jl__j__j  l__j   \___jl__j__jl__j  l__j   
+                                                                                   
+
 # WhatsApp Automation Project
 
 This project automates the handling of WhatsApp messages using Selenium for Web WhatsApp interaction and OpenAI's API for AI-driven responses. It includes multiple versions of both the AI assistant and the WhatsApp automation agent, each adding more functionality and reliability. This document provides an overview of each file, setup instructions, and workflow guidance.
@@ -25,7 +34,7 @@ This project automates the handling of WhatsApp messages using Selenium for Web 
 
 ### Configuration Files
 
-- **`.env`**: Create .env file and Paste your OpenAI API key here to enable the AI functionality. The AI agent will read this key automatically.
+- **`.env`**: Create .env file and paste your OpenAI API key here to enable the AI functionality. The AI agent will read this key automatically.
 
 - **`get_chrome_profile_path()` in `whatsapp_agent.py` and `whatsapp_agent_V2.py`**: Modify this function to set the correct path for your Chrome profile based on your operating system.
 
@@ -53,7 +62,7 @@ In `whatsapp_agent.py` or `whatsapp_agent_V2.py`, update the `get_chrome_profile
 
 1. Set `ui_mode = True` on line 21 in `whatsapp_agent_V2.py` to enable UI mode.
 2. Run the file in a terminal to open Web WhatsApp and scan the QR code for login.
-3. After the initial login, the cookies will be saved, allowing future runs in headless (background) mode if desired by changing the ui_mode from 'True' to 'False.
+3. After the initial login, the cookies will be saved, allowing future runs in headless (background) mode if desired by changing `ui_mode` from `True` to `False`.
 
 ## Workflow
 
