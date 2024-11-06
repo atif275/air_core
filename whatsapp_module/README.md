@@ -7,8 +7,14 @@
                     |  _  | |  | |    \     l  `  '  !|  |  ||  _  |  |  |  /  \ ||  _  ||  |  |  |   
                     |  |  | j  l |  .  Y     \      / |  |  ||  |  |  |  |  \    ||  |  ||  |  |  |   
                     l__j__j|____jl__j\_j      \_/\_/  l__j__jl__j__j  l__j   \___jl__j__jl__j  l__j   
-                                                                                   
+
+                             ____ ____ ____ _________ ____ ____ ____ ____ ____ ____ ____ ____ 
+                            ||A |||I |||R |||       |||W |||H |||A |||T |||S |||A |||P |||P ||
+                            ||__|||__|||__|||_______|||__|||__|||__|||__|||__|||__|||__|||__||
+                            |/__\|/__\|/__\|/_______\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|
+                                                                                                               
 ```
+
 # WhatsApp Automation Project
 
 This project automates the handling of WhatsApp messages using Selenium for Web WhatsApp interaction and OpenAI's API for AI-driven responses. It includes multiple versions of both the AI assistant and the WhatsApp automation agent, each adding more functionality and reliability. This document provides an overview of each file, setup instructions, and workflow guidance.
