@@ -8,23 +8,23 @@
                     |  |  | j  l |  .  Y     \      / |  |  ||  |  |  |  |  \    ||  |  ||  |  |  |   
                     l__j__j|____jl__j\_j      \_/\_/  l__j__jl__j__j  l__j   \___jl__j__jl__j  l__j   
 
-                             ____ ____ ____ _________ ____ ____ ____ ____ ____ ____ ____ ____ ____ 
-                            ||A |||I |||R |||       |||D |||I |||R |||E |||C |||T |||O |||R |||Y ||
-                            ||__|||__|||__|||_______|||__|||__|||__|||__|||__|||__|||__|||__|||__|| 
-                            |/__\|/__\|/__\|/_______\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|/__\|/__\| 
+                             ____ ____ ____ _________ ____ ____ ____ ____ ____ ____ ____ 
+                            ||A |||I |||R |||       |||N |||O |||T |||E |||P |||A |||D |||
+                            ||__|||__|||__|||_______|||__|||__|||__|||__|||__|||__|||__|||
+                            |/__\|/__\|/__\|/_______\|/__\|/__\|/__\|/__\|/__\|/__\|/__\||
                                                                                                                
 ```
 
-# Directory system Automation Project
+# Notepad Automation Project
 
-This project automates the handling of Directory system 
+This project automates the handling of Notepad 
 
 ## Project Files
 
 ### AI Agent Files
 
 
-### Directory system Automation Agent Files
+### Notepad Automation Agent Files
 
 ### Configuration Files
 
@@ -54,4 +54,4 @@ pip install -r requirements.txt
 
 ## Troubleshooting
 
-This setup enables automated, AI-powered handling of Directory systems notes with flexible options 
+This setup enables automated, AI-powered handling of Notepads notes with flexible options 
