@@ -72,7 +72,11 @@ def load_emails_to_vector_db():
 def query_vector_db(query, k=5):
     query_vector = model.encode([query])[0]
     distances, indices = index.search(np.array([query_vector]), k)
-    relevant_emails = [email_data[i] for i in indices[0] if i < len(email_data)]
+    
+    # Filter out -1 and ensure uniqueness
+    unique_indices = list(set(i for i in indices[0] if i >= 0))
+    relevant_emails = [email_data[i] for i in unique_indices if i < len(email_data)]
+    
     return relevant_emails
 
 # Asynchronous function to process AI queries with email context
@@ -95,6 +99,7 @@ async def ai_query_with_email_context(query):
         if "respond to" in query.lower():
             # Generate a subject and body for email response
             recipient_email = relevant_emails[0]["sender"] if relevant_emails else None
+            print("recp email"+recipient_email)
             if recipient_email:
                 prompt = (
                     f"You are an email assistant. The user wants to respond to an email from {recipient_email}.\n"
