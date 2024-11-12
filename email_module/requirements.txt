@@ -1,4 +1,8 @@
-selenium
+openai==0.28
+faiss-cpu
+numpy
 python-dotenv
-openai
+torch
+sympy
+sentence_transformers
 langchain

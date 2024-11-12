@@ -13,7 +13,7 @@ from email_sender import send_email  # Make sure send_email function is correctl
 # Load environment variables
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Initialize LangChain memory for conversation context and vector model
 memory = ConversationBufferMemory(return_messages=True)
 model = SentenceTransformer('all-MiniLM-L6-v2')  # Model for embedding
