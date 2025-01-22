@@ -1,0 +1,119 @@
+# Root level ignores
+*.log
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+node_modules/
+build/
+
+.vscode/
+.idea/
+*.iml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log
+dist/
+coverage/
+test-results/
+
+# === Backend (Node.js + Express + MongoDB) ===
+backend/node_modules/
+backend/build/
+backend/dist/
+
+backend/.vscode/
+backend/.idea/
+backend/.DS_Store
+backend/logs/
+backend/debug.log
+backend/npm-debug.log
+backend/yarn-debug.log
+backend/yarn-error.log
+backend/package-lock.json
+backend/yarn.lock
+
+# Logs
+backend/logs/
+backend/*.log
+backend/debug.log
+backend/error.log
+
+# MongoDB dumps and data
+backend/dump/
+backend/data/
+backend/mongodb.log
+
+# === Frontend (Flutter Mobile App) ===
+frontend/.dart_tool/
+frontend/.flutter-plugins/
+frontend/.flutter-plugins-dependencies
+frontend/.idea/
+frontend/.packages
+frontend/.vscode/
+frontend/build/
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+frontend/ios/Flutter/App.framework
+frontend/ios/Flutter/Generated.xcconfig
+frontend/ios/Flutter/flutter_export_environment.sh
+frontend/pubspec.lock
+frontend/flutter_build/
+frontend/flutter_assets/
+frontend/android/app/debug/
+frontend/android/app/profile/
+frontend/android/app/release/
+frontend/android/local.properties
+
+# Flutter specific files
+frontend/generated_plugin_registrant.dart
+frontend/*.iml
+
+# Firebase related files (if used)
+frontend/firebase_app_id_file.json
+frontend/android/app/google-services.json
+frontend/ios/Runner/GoogleService-Info.plist
+
+# Lint / Analysis
+frontend/analysis_options.yaml
+
+# Temporary files
+frontend/.metadata
+frontend/.flutter-plugins-dependencies
+frontend/.flutter-plugins
+frontend/.packages
+frontend/.pub-cache/
+frontend/captured/
+frontend/flutter_*.log
+
+# MacOS specific files
+frontend/macos/Flutter/ephemeral/
+frontend/macos/Flutter/App.framework
+frontend/macos/Flutter/Flutter.framework
+frontend/macos/Flutter/GeneratedPluginRegistrant.swift
+frontend/macos/Flutter/flutter_export_environment.sh
+
+# Linux specific files
+frontend/linux/flutter/ephemeral/
+frontend/linux/flutter/generated_plugin_registrant.cc
+
+# Windows specific files
+frontend/windows/flutter/ephemeral/
+frontend/windows/flutter/generated_plugin_registrant.cc
+frontend/windows/flutter/runner/
+frontend/windows/flutter/generated_plugin_registrant.h
+
+# Web specific files (if using Flutter Web)
+frontend/web/.dart_tool/
+frontend/web/flutter/
+frontend/web/main.dart.js
+frontend/web/flutter_service_worker.js
+frontend/web/assets/
+frontend/web/canvaskit/
+frontend/web/.last_build_id
+
