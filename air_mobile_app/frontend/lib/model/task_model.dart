@@ -10,7 +10,7 @@ class TaskModel {
   String? time;
   String? date;
   String? show;
-  String? progress;
+  int? progress;
   String? status;
 
   TaskModel(
@@ -27,17 +27,17 @@ class TaskModel {
       required this.status});
 
   TaskModel.fromMap(Map<String, dynamic> res) {
-    key = res['key'];
+    key = res['_id']?.toString();
     title = res['title'];
     category = res['category'];
     description = res['description'];
     image = res['image'];
-    periority = res['periority'];
-    show = res['show'];
+    periority = res['priority'];
+    show = 'yes';
     time = res['time'];
     date = res['date'];
-    progress=res['progress'];
-    status=res['status'];
+    progress = res['progress'] as int?;
+    status = res['status'];
   }
 
   Map<String, Object?> toMap() {
@@ -51,8 +51,8 @@ class TaskModel {
       'time': time,
       'date': date,
       'show': show,
-      'status' : status,
-      'progress' : progress,
+      'status': status,
+      'progress': progress,
     };
   }
 }

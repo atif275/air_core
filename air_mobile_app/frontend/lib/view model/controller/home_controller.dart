@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import 'package:air/view/new%20task/components/progress_picker.dart';
 import 'package:air/services/task_api_service.dart';
+import 'package:air/model/task_model.dart';
 
 class HomeController extends GetxController {
   var name = 'Atif'.obs; 
@@ -29,23 +30,23 @@ class HomeController extends GetxController {
   RxList<Map<String, dynamic>> get taskList => list;
 
   // Method to update the task list from the API response
-  void setTasks(List<dynamic> tasks) {
-    list.clear(); // Clear existing tasks before updating
+  void setTasks(List<TaskModel> tasks) {
+    list.clear();
 
     for (var task in tasks) {
       list.add({
-        "_id": task['_id'] ?? '',  // Ensure _id is not null
+        "_id": task.key ?? '',
         "show": "yes",
-        "title": task['title'] ?? '',
-        "category": task['category'] ?? '',
-        "progress": (task['progress'] ?? 0).toDouble(),
-        "date": task['date'] ?? '',
-        "image": task['image'] ?? 'assets/images/task3.jpg',
-        "daysLeft": _calculateDaysLeft(task['date']),
+        "title": task.title ?? '',
+        "category": task.category ?? '',
+        "progress": (task.progress ?? 0).toDouble(),
+        "date": task.date ?? '',
+        "image": task.image ?? 'assets/images/task3.jpg',
+        "daysLeft": _calculateDaysLeft(task.date),
       });
     }
 
-    _updateTaskData(); // Update task count and data state
+    _updateTaskData();
   }
 
   // Helper function to calculate days left based on task date

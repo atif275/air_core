@@ -2,22 +2,23 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
+import '../model/task_model.dart';
 
 class TaskApiService {
-  final String baseUrl = dotenv.env['API_URL'] ?? 'http://localhost:5001/api';
+  final String baseUrl = dotenv.env['API_URL'] ?? 'http://localhost:5001';
 
-  // Corrected method name to match the function call in main.dart
-  Future<List<dynamic>> fetchTasks() async {
+  Future<List<TaskModel>> fetchTasks() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/tasks'));
-
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => TaskModel.fromMap(json)).toList();
       } else {
         throw Exception('Failed to load tasks');
       }
     } catch (e) {
-      throw Exception('Error fetching tasks: $e');
+      print('Error fetching tasks: $e');
+      throw Exception('Failed to connect to server');
     }
   }
 

@@ -9,11 +9,17 @@ import 'chat_page.dart'; // Import the ChatPage file
 import 'package:air/view/home page/home_page.dart';
 import 'package:air/services/task_api_service.dart'; // Import backend API service
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:air/view%20model/controller/voice_assistant_controller.dart';
+import 'package:air/widgets/speech_bubble.dart';  // Add this import
+import 'package:air/utils/server_checker.dart';
+import 'package:air/widgets/error_dialog.dart';
+import 'package:model_viewer_plus/src/model_viewer_plus.dart' show Loading, TouchAction, InteractionPrompt;
+import 'package:air/services/transcription_service.dart';
+
 //import 'home_page.dart';
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // Ensure Flutter is initialized before async calls
-  await dotenv.load(); // Load environment variables
-  await TaskApiService().fetchTasks(); // Fetch tasks from backend
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load();
   runApp(const AirApp());
 }
 
@@ -42,7 +48,10 @@ class _AirAppState extends State<AirApp> {
       darkTheme: ThemeData.dark(), // Dark theme
       //home: const TasksHomePage(), // Entry point
       themeMode: isDarkMode ? ThemeMode.dark : ThemeMode.light, // Control theme dynamically
-      home: HomePage(toggleThemeMode: toggleThemeMode, isDarkMode: isDarkMode),
+      home: HomePage(
+        toggleThemeMode: toggleThemeMode, 
+        isDarkMode: isDarkMode,
+      ),
     ); 
   }
 }
@@ -61,7 +70,9 @@ class _HomePageState extends State<HomePage> {
   String cameraOrbit = "-90deg 90deg auto"; // Default position
   bool isResetting = false; // Prevent multiple resets
   bool isLoading = true; // Tracks whether the model is loading
-  bool isMuted = false; // Tracks mute/unmute state
+  bool isMuted = true; // Tracks mute/unmute state
+  final VoiceAssistantController _voiceController = Get.put(VoiceAssistantController());
+
   String status = "Loading AIR..."; // Default status text
 
   @override
@@ -99,6 +110,31 @@ class _HomePageState extends State<HomePage> {
         print("Robot head reset to front-facing orientation.");
       });
     });
+  }
+
+  void navigateToTaskManagement(BuildContext context) async {
+    try {
+      bool isServerRunning = await ServerChecker.isServerRunning();
+      
+      if (!isServerRunning) {
+        if (context.mounted) {
+          await ErrorDialog.show(context);
+        }
+        return;
+      }
+      
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => TasksHomePage()),
+        );
+      }
+    } catch (e) {
+      print('Navigation error: $e');
+      if (context.mounted) {
+        await ErrorDialog.show(context);
+      }
+    }
   }
 
   Widget _buildRoundButton({
@@ -173,10 +209,9 @@ class _HomePageState extends State<HomePage> {
               children: [
                 // 3D Model Viewer with Loading State
                 SizedBox(
-                  height: 400, // Adjust size of the model
+                  height: 400,
                   child: Stack(
                     children: [
-                      // Loading Animation from flutter_spinkit
                       if (isLoading)
                         const Center(
                           child: SpinKitCircle(
@@ -184,18 +219,49 @@ class _HomePageState extends State<HomePage> {
                             size: 50.0,
                           ),
                         ),
-
-                      // Model Viewer
                       Opacity(
-                        opacity: isLoading ? 0.0 : 1.0, // Hide model while loading
+                        opacity: isLoading ? 0.0 : 1.0,
                         child: ModelViewer(
-                          key: ValueKey(cameraOrbit), // Force rebuild on cameraOrbit change
+                          key: ValueKey(cameraOrbit),
                           src: 'assets/Air3.glb',
                           alt: "A 3D model of the AIR robot head",
                           autoRotate: false,
                           cameraControls: true,
-                          cameraOrbit: cameraOrbit, // Dynamically updated
+                          cameraOrbit: cameraOrbit,
+                          loading: Loading.eager,
+                          ar: false,
+                          exposure: 1.0,
+                          shadowIntensity: 0,
+                          backgroundColor: Colors.transparent,
+                          disableZoom: true,
+                          disablePan: true,
+                          touchAction: TouchAction.panY,
+                          minCameraOrbit: "auto auto auto",
+                          maxCameraOrbit: "auto auto auto",
+                          onWebViewCreated: (controller) {
+                            print("WebView Created Successfully");
+                            Future.delayed(Duration(milliseconds: 500), () {
+                              setState(() {
+                                isLoading = false;
+                              });
+                            });
+                          },
                         ),
+                      ),
+
+                      // Add speech bubble overlay here
+                      Obx(() => _voiceController.isListening.value
+                        ? Positioned(
+                            bottom: 100,
+                            left: 20,
+                            right: 20,
+                            child: SpeechBubble(
+                              text: _voiceController.userSpeech.value.isEmpty 
+                                  ? "Listening..." 
+                                  : _voiceController.userSpeech.value,
+                            ),
+                          )
+                        : const SizedBox(),
                       ),
                     ],
                   ),
@@ -246,22 +312,33 @@ class _HomePageState extends State<HomePage> {
                 },
               ),
             ),
-            _buildRoundButton(
-              icon: isMuted ? Icons.mic_off : Icons.mic,
-              tooltip: isMuted ? "Unmute" : "Mute",
-              onPressed: () {
-                setState(() {
-                  isMuted = !isMuted;
-                });
+            IconButton(
+              icon: Icon(
+                isMuted ? Icons.mic_off : Icons.mic,
+                size: 30,
+                color: isMuted
+                    ? Colors.red
+                    : (widget.isDarkMode ? Colors.white : Colors.black),
+              ),
+              onPressed: () async {
+                if (_voiceController.isListening.value) {
+                  await _voiceController.stopListening();
+                  setState(() {
+                    isMuted = true;
+                  });
+                } else {
+                  await _voiceController.startListening();
+                  setState(() {
+                    isMuted = false;
+                  });
+                }
                 LogsManager.addLog(
-                  message: isMuted ? "Muted" : "Unmuted",
-                  source: "User",
+                  message: isMuted ? "Voice Assistant Muted" : "Voice Assistant Activated",
+                  source: "User"
                 );
               },
-              iconColor: isMuted
-                  ? Colors.red
-                  : (widget.isDarkMode ? Colors.white : Colors.black),
             ),
+
             Padding(
               padding: const EdgeInsets.only(right: 24.0), // Add padding for right alignment
               child: _buildRoundButton(
@@ -291,17 +368,7 @@ class _HomePageState extends State<HomePage> {
                 child: _buildRoundButton(
                   icon: Icons.check_circle,
                   tooltip: "Tasks",
-                  onPressed: () {
-                    Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) => const TasksHomePage(),
-  ),
-);
-                    LogsManager.addLog(message: "Opened Tasks Page", source: "User");
-                  },
-
-
+                  onPressed: () => navigateToTaskManagement(context),
                 ),
               ),
               Padding(
@@ -312,7 +379,6 @@ class _HomePageState extends State<HomePage> {
                   onPressed: () {
                     LogsManager.addLog(message: "Opened Health Page", source: "User");
                   },
-
                 ),
               ),
             ],

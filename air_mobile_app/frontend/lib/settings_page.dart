@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:get/get.dart';
+import 'package:air/view model/controller/voice_assistant_controller.dart';
 import 'logs_manager.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -10,6 +12,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  final VoiceAssistantController _voiceController = Get.find();
   bool pcIntegrationEnabled = false;
   bool whatsappAccess = false;
   bool instagramAccess = false;
@@ -33,6 +36,42 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       body: ListView(
         children: [
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text(
+              "Voice Assistant Settings",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          Obx(() => SwitchListTile(
+            title: const Text("English Translation"),
+            subtitle: const Text("Convert all speech to English automatically"),
+            value: _voiceController.isEnglishTranslationEnabled.value,
+            onChanged: (value) {
+              _voiceController.isEnglishTranslationEnabled.value = value;
+              if (value) {
+                _voiceController.isRomanizationEnabled.value = false;
+              }
+              _logFeatureToggle("English Translation", value);
+            },
+            secondary: const Icon(Icons.translate),
+          )),
+
+          Obx(() => SwitchListTile(
+            title: const Text("Romanize Text"),
+            subtitle: const Text("Convert non-English text to Roman script"),
+            value: _voiceController.isRomanizationEnabled.value,
+            onChanged: _voiceController.canEnableRomanization 
+              ? (value) {
+                  _voiceController.isRomanizationEnabled.value = value;
+                  _logFeatureToggle("Text Romanization", value);
+                }
+              : null,
+            secondary: const Icon(Icons.text_format),
+          )),
+
+          const Divider(),
+
           // PC Integration
           SwitchListTile(
             title: const Text("PC Integration"),
@@ -138,6 +177,17 @@ class _SettingsPageState extends State<SettingsPage> {
             },
             secondary: const Icon(Icons.security),
           ),
+
+          Obx(() => SwitchListTile(
+            title: const Text("Real-time Transcription"),
+            subtitle: const Text("Transcribe speech in real-time without stopping"),
+            value: _voiceController.isRealtimeTranscriptionEnabled.value,
+            onChanged: (value) {
+              _voiceController.isRealtimeTranscriptionEnabled.value = value;
+              _logFeatureToggle("Real-time Transcription", value);
+            },
+            secondary: const Icon(Icons.speed),
+          )),
         ],
       ),
     );

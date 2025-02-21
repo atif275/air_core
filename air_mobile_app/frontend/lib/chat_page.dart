@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'logs_manager.dart';
+import 'package:air/widgets/mic_button.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({Key? key}) : super(key: key);
@@ -125,7 +126,7 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const MicButton(),
                 IconButton(
                   onPressed: () => _sendMessage(_controller.text),
                   icon: Icon(Icons.send,
