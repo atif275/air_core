@@ -267,44 +267,44 @@ class _HomePageState extends State<HomePage> {
                           // 3D Model Page
                           Stack(
                             children: [
-                              if (isLoading)
-                                const Center(
-                                  child: SpinKitCircle(
-                                    color: Colors.white,
-                                    size: 50.0,
-                                  ),
-                                ),
-                              Opacity(
-                                opacity: isLoading ? 0.0 : 1.0,
-                                child: ModelViewer(
-                                  key: _modelKey,
-                                  src: 'assets/Air3.glb',
-                                  alt: "A 3D model of the AIR robot head",
-                                  autoRotate: false,
-                                  cameraControls: true,
-                                  cameraOrbit: cameraOrbit,
-                                  loading: Loading.eager,
-                                  ar: false,
-                                  exposure: 1.0,
-                                  shadowIntensity: 0,
-                                  backgroundColor: Colors.transparent,
-                                  disableZoom: true,
-                                  disablePan: true,
-                                  touchAction: TouchAction.panY,
-                                  minCameraOrbit: "auto auto auto",
-                                  maxCameraOrbit: "auto auto auto",
-                                  onWebViewCreated: (controller) {
-                                    print("WebView Created Successfully");
-                                    if (isLoading) {
-                                      Future.delayed(Duration(milliseconds: 500), () {
-                                        setState(() {
-                                          isLoading = false;
-                                        });
-                                      });
-                                    }
-                                  },
-                                ),
-                              ),
+                              // if (isLoading)
+                              //   const Center(
+                              //     child: SpinKitCircle(
+                              //       color: Colors.white,
+                              //       size: 50.0,
+                              //     ),
+                              //   ),
+                              // Opacity(
+                              //   opacity: isLoading ? 0.0 : 1.0,
+                              //   child: ModelViewer(
+                              //     key: _modelKey,
+                              //     src: 'assets/Air3.glb',
+                              //     alt: "A 3D model of the AIR robot head",
+                              //     autoRotate: false,
+                              //     cameraControls: true,
+                              //     cameraOrbit: cameraOrbit,
+                              //     loading: Loading.eager,
+                              //     ar: false,
+                              //     exposure: 1.0,
+                              //     shadowIntensity: 0,
+                              //     backgroundColor: Colors.transparent,
+                              //     disableZoom: true,
+                              //     disablePan: true,
+                              //     touchAction: TouchAction.panY,
+                              //     minCameraOrbit: "auto auto auto",
+                              //     maxCameraOrbit: "auto auto auto",
+                              //     onWebViewCreated: (controller) {
+                              //       print("WebView Created Successfully");
+                              //       if (isLoading) {
+                              //         Future.delayed(Duration(milliseconds: 500), () {
+                              //           setState(() {
+                              //             isLoading = false;
+                              //           });
+                              //         });
+                              //       }
+                              //     },
+                              //   ),
+                              // ),
 
                               // Add speech bubble overlay here
                               Obx(() => _voiceController.isListening.value

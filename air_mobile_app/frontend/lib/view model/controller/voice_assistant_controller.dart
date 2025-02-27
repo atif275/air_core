@@ -116,25 +116,27 @@ class VoiceAssistantController extends GetxController {
   }
 
   Future<void> processUserSpeech(String userInput) async {
-    if (userInput.isEmpty) return;
+  if (userInput.isEmpty) return;
 
-    try {
-      final language = _detectLanguage(userInput);
-      print("Detected Language: $language");
-      
-      if (!isEnglishTranslationEnabled.value) {
-        // Keep original text
-        print("Original Text: $userInput");
-        await TranscriptionService.saveTranscription(userInput, language);
-      } else {
-        // Use Whisper's English translation
-        print("Translated Text: $userInput");
-        await TranscriptionService.saveTranscription(userInput, 'en');
-      }
-    } catch (e) {
-      print("Error processing speech: $e");
+  try {
+    final language = _detectLanguage(userInput);
+    
+    print("\n=== Speech Processing ===");
+    print("Language Detected: $language");
+    print("Original Text: $userInput");
+    
+    if (isEnglishTranslationEnabled.value) {
+      print("Translation Enabled: Yes");
+    } else {
+      print("Translation Enabled: No");
     }
+    
+    // Send to Python server
+    await sendToPythonServer(userInput);
+  } catch (e) {
+    print("Error processing speech: $e");
   }
+}
 
   String _detectLanguage(String text) {
     // Urdu specific characters and patterns
@@ -194,15 +196,20 @@ class VoiceAssistantController extends GetxController {
   }
 
   Future<void> sendToPythonServer(String transcribedText) async {
-    try {
-      final success = await _pythonServer.sendTranscribedText(transcribedText);
-      if (success) {
-        print('Successfully sent to Python server');
-      } else {
-        print('Failed to send to Python server');
-      }
-    } catch (e) {
-      print('Error in sendToPythonServer: $e');
+  try {
+    print("\n=== Server Communication ===");
+    final success = await _pythonServer.sendTranscribedText(transcribedText);
+    if (success) {
+      print('Status: Success');
+      print('Request: $transcribedText');
+      // The response logging is handled in python_server_service.dart
+    } else {
+      print('Status: Failed');
+      print('Error: Unable to communicate with server');
     }
+  } catch (e) {
+    print('Status: Error');
+    print('Details: $e');
   }
+}
 }
