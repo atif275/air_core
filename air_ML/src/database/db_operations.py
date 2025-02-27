@@ -1,5 +1,4 @@
 import sqlite3
-from typing import Optional
 from src.config.settings import DATABASE_PATH
 from src.types.person import PersonData
 

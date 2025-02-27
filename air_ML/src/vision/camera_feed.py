@@ -1,41 +1,50 @@
 import cv2
+import os
+import time
 from src.vision.face_detection import detect_faces_and_landmarks
 from src.vision.active_person import identify_active_person
 from src.database.active_person import update_active_person_id
 
 def process_camera_feed(stop_event, shared_data, lock):
-    cap = cv2.VideoCapture(0)
-    print("Starting optimized camera feed...", flush=True)
-
-    frame_count = 0
+    frames_dir = "frames"
+    print("Starting frame processing from directory...", flush=True)
 
     while not stop_event.is_set():
-        ret, frame = cap.read()
-        if not ret:
-            break
+        try:
+            files = sorted([f for f in os.listdir(frames_dir) if f.endswith('.jpg')])
+            if not files:
+                time.sleep(0.1)
+                continue
 
-        frame_count += 1
-        if frame_count % 5 != 0:
-            continue
+            # Process the first image in the sorted list
+            image_path = os.path.join(frames_dir, files[0])
+            
+            frame = cv2.imread(image_path)
+            if frame is None:
+                print(f"Failed to read image: {image_path}")
+                os.remove(image_path)
+                continue
 
-        detected_faces = detect_faces_and_landmarks(frame)
-        active_person_id, face_coords = identify_active_person(detected_faces, frame)  # ✅ Now gets face_coords too
+            # Detect faces and get results
+            detected_faces = detect_faces_and_landmarks(frame)
+            
+            if detected_faces and len(detected_faces) > 0:
+                active_person_id, face_coords = identify_active_person(detected_faces, frame)
 
-        if active_person_id:
-            with lock:
-                shared_data["active_person_id"] = active_person_id
-                update_active_person_id(active_person_id)
+                if active_person_id and face_coords:
+                    with lock:
+                        shared_data["active_person_id"] = active_person_id
+                        update_active_person_id(active_person_id)
 
-            if face_coords:  # ✅ Draw bounding box around active person
-                x, y, w, h = face_coords
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(frame, f"ID: {active_person_id}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Remove the processed image
+            os.remove(image_path)
+            print(f"Processed and removed: {image_path}", flush=True)
 
-        cv2.imshow("Camera Feed - AIR", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            stop_event.set()
-            break
+        except Exception as e:
+            print(f"Error processing {image_path}: {e}", flush=True)
+            try:
+                os.remove(image_path)
+            except:
+                pass
 
-    cap.release()
-    cv2.destroyAllWindows()
-    print("Camera feed stopped.", flush=True)
+    print("Frame processing stopped.", flush=True)

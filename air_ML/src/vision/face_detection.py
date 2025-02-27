@@ -17,20 +17,28 @@ def detect_faces_and_landmarks(frame: np.ndarray) -> List[Tuple[dlib.rectangle, 
     Returns:
         List of tuples containing face rectangles and their landmarks
     """
-    # Convert frame to grayscale for face detection
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    
-    # Detect faces
-    faces = face_detector(gray)
-    
-    results = []
-    for face in faces:
-        # Get facial landmarks
-        landmarks = predictor(gray, face)
-        landmarks_points = np.array([[p.x, p.y] for p in landmarks.parts()])
-        results.append((face, landmarks_points))
-    
-    return results
+    try:
+        # Convert frame to grayscale for face detection
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # Detect faces
+        faces = face_detector(gray)
+        
+        results = []
+        for face in faces:
+            # Ensure face is a dlib.rectangle object
+            if not isinstance(face, dlib.rectangle):
+                continue
+                
+            # Get facial landmarks
+            landmarks = predictor(gray, face)
+            landmarks_points = np.array([[p.x, p.y] for p in landmarks.parts()])
+            results.append((face, landmarks_points))
+        
+        return results
+    except Exception as e:
+        print(f"Error in face detection: {e}")
+        return []
 
 def draw_face_landmarks(frame: np.ndarray, faces_and_landmarks: List[Tuple[dlib.rectangle, np.ndarray]]) -> np.ndarray:
     """
