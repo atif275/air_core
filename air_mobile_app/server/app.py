@@ -17,4 +17,9 @@ def receive_transcription():
     return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
+    # Enable debug mode and make accessible on network
+    app.run(
+        host='0.0.0.0',  # Makes server accessible externally
+        port=5001,       # Port number
+        debug=False      # Disable debug mode in production
+    )

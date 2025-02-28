@@ -36,6 +36,13 @@
 	<string>We need speech recognition to understand your voice commands</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth access is required for enhanced voice processing capabilities.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>AIR needs camera access to enable video streaming features</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>AIR needs photo library access to save captured images</string>
+	<key>Privacy - Camera Usage Description</key>
+	<string>AIR needs camera access to enable video streaming features</string>
+
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -87,5 +94,10 @@
 		<key>mediaTypesRequiringUserActionForPlayback</key>
 		<array/>
 	</dict>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+		<string>camera</string>
+	</array>
 </dict>
 </plist>

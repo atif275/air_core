@@ -15,11 +15,23 @@ import 'package:air/utils/server_checker.dart';
 import 'package:air/widgets/error_dialog.dart';
 import 'package:model_viewer_plus/src/model_viewer_plus.dart' show Loading, TouchAction, InteractionPrompt;
 import 'package:air/services/transcription_service.dart';
+import 'package:air/services/camera_service.dart';
+import 'package:air/widgets/camera_overlay.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:air/widgets/coming_soon_panel.dart';
+import 'package:air/widgets/swipe_indicator.dart';
 
 //import 'home_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load();
+  
+  // Only request microphone and speech at startup
+  await [
+    Permission.microphone,
+    Permission.speech,
+  ].request();
+  
   runApp(const AirApp());
 }
 
@@ -32,11 +44,27 @@ class AirApp extends StatefulWidget {
 
 class _AirAppState extends State<AirApp> {
   bool isDarkMode = true; // Default to dark mode
+  final CameraService _cameraService = CameraService();
+  bool _showCamera = false;
 
   void toggleThemeMode() {
     setState(() {
       isDarkMode = !isDarkMode;
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      await _cameraService.initializeCamera();
+    } catch (e) {
+      print('Error initializing camera: $e');
+    }
   }
 
   @override
@@ -53,6 +81,12 @@ class _AirAppState extends State<AirApp> {
         isDarkMode: isDarkMode,
       ),
     ); 
+  }
+
+  @override
+  void dispose() {
+    _cameraService.dispose();
+    super.dispose();
   }
 }
 
@@ -72,6 +106,12 @@ class _HomePageState extends State<HomePage> {
   bool isLoading = true; // Tracks whether the model is loading
   bool isMuted = true; // Tracks mute/unmute state
   final VoiceAssistantController _voiceController = Get.put(VoiceAssistantController());
+  final CameraService _cameraService = CameraService();
+  bool _showCamera = false;
+  final PageController _pageController = PageController();
+  bool _isShowingModel = true;
+  bool _isSwipeExpanded = false;
+  final GlobalKey<State<ModelViewer>> _modelKey = GlobalKey();
 
   String status = "Loading AIR..."; // Default status text
 
@@ -208,63 +248,134 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start, // Align elements to the left
               children: [
                 // 3D Model Viewer with Loading State
-                SizedBox(
-                  height: 400,
-                  child: Stack(
-                    children: [
-                      if (isLoading)
-                        const Center(
-                          child: SpinKitCircle(
-                            color: Colors.white,
-                            size: 50.0,
+                Stack(
+                  children: [
+                    SizedBox(
+                      height: 400,
+                      child: PageView(
+                        controller: _pageController,
+                        physics: _isSwipeExpanded 
+                            ? const AlwaysScrollableScrollPhysics()
+                            : const NeverScrollableScrollPhysics(),
+                        onPageChanged: (index) {
+                          setState(() {
+                            _isShowingModel = index == 0;
+                            _isSwipeExpanded = index == 1;
+                          });
+                        },
+                        children: [
+                          // 3D Model Page
+                          Stack(
+                            children: [
+                              // if (isLoading)
+                              //   const Center(
+                              //     child: SpinKitCircle(
+                              //       color: Colors.white,
+                              //       size: 50.0,
+                              //     ),
+                              //   ),
+                              // Opacity(
+                              //   opacity: isLoading ? 0.0 : 1.0,
+                              //   child: ModelViewer(
+                              //     key: _modelKey,
+                              //     src: 'assets/Air3.glb',
+                              //     alt: "A 3D model of the AIR robot head",
+                              //     autoRotate: false,
+                              //     cameraControls: true,
+                              //     cameraOrbit: cameraOrbit,
+                              //     loading: Loading.eager,
+                              //     ar: false,
+                              //     exposure: 1.0,
+                              //     shadowIntensity: 0,
+                              //     backgroundColor: Colors.transparent,
+                              //     disableZoom: true,
+                              //     disablePan: true,
+                              //     touchAction: TouchAction.panY,
+                              //     minCameraOrbit: "auto auto auto",
+                              //     maxCameraOrbit: "auto auto auto",
+                              //     onWebViewCreated: (controller) {
+                              //       print("WebView Created Successfully");
+                              //       if (isLoading) {
+                              //         Future.delayed(Duration(milliseconds: 500), () {
+                              //           setState(() {
+                              //             isLoading = false;
+                              //           });
+                              //         });
+                              //       }
+                              //     },
+                              //   ),
+                              // ),
+
+                              // Add speech bubble overlay here
+                              Obx(() => _voiceController.isListening.value
+                                ? Positioned(
+                                    bottom: 100,
+                                    left: 20,
+                                    right: 20,
+                                    child: SpeechBubble(
+                                      text: _voiceController.userSpeech.value.isEmpty 
+                                          ? "Listening..." 
+                                          : _voiceController.userSpeech.value,
+                                    ),
+                                  )
+                                : const SizedBox(),
+                              ),
+                            ],
+                          ),
+                          
+                          // Coming Soon Page with Camera
+                          ComingSoonPanel(
+                            cameraService: _cameraService,
+                            showCamera: _showCamera,
+                            onCameraClose: () {
+                              _cameraService.stopStreaming();
+                              setState(() => _showCamera = false);
+                              LogsManager.addLog(message: "Closed camera stream", source: "System");
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Swipe Indicator
+                    Positioned(
+                      left: _isSwipeExpanded ? 0 : null,
+                      right: _isSwipeExpanded ? null : 0,
+                      top: 140,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: GestureDetector(
+                          key: ValueKey<bool>(_isSwipeExpanded),
+                          onHorizontalDragEnd: (details) {
+                            if (details.primaryVelocity! < 0 && !_isSwipeExpanded) {
+                              _pageController.animateToPage(
+                                1,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            } else if (details.primaryVelocity! > 0 && _isSwipeExpanded) {
+                              _pageController.animateToPage(
+                                0,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            }
+                          },
+                          child: SwipeIndicator(
+                            isExpanded: _isSwipeExpanded,
+                            shouldBounce: _showCamera,
+                            onTap: () {
+                              _pageController.animateToPage(
+                                _isSwipeExpanded ? 0 : 1,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            },
                           ),
                         ),
-                      Opacity(
-                        opacity: isLoading ? 0.0 : 1.0,
-                        child: ModelViewer(
-                          key: ValueKey(cameraOrbit),
-                          src: 'assets/Air3.glb',
-                          alt: "A 3D model of the AIR robot head",
-                          autoRotate: false,
-                          cameraControls: true,
-                          cameraOrbit: cameraOrbit,
-                          loading: Loading.eager,
-                          ar: false,
-                          exposure: 1.0,
-                          shadowIntensity: 0,
-                          backgroundColor: Colors.transparent,
-                          disableZoom: true,
-                          disablePan: true,
-                          touchAction: TouchAction.panY,
-                          minCameraOrbit: "auto auto auto",
-                          maxCameraOrbit: "auto auto auto",
-                          onWebViewCreated: (controller) {
-                            print("WebView Created Successfully");
-                            Future.delayed(Duration(milliseconds: 500), () {
-                              setState(() {
-                                isLoading = false;
-                              });
-                            });
-                          },
-                        ),
                       ),
-
-                      // Add speech bubble overlay here
-                      Obx(() => _voiceController.isListening.value
-                        ? Positioned(
-                            bottom: 100,
-                            left: 20,
-                            right: 20,
-                            child: SpeechBubble(
-                              text: _voiceController.userSpeech.value.isEmpty 
-                                  ? "Listening..." 
-                                  : _voiceController.userSpeech.value,
-                            ),
-                          )
-                        : const SizedBox(),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
 
                 // Reset Button Below 3D Model
@@ -359,20 +470,38 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 8), // Reduced space between rows
 
           // Second Row Buttons
-          // Second Row Buttons
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween, // Align to the left and right
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Padding(
-                padding: const EdgeInsets.only(left: 24.0), // Add padding for left alignment
+                padding: const EdgeInsets.only(left: 24.0),
                 child: _buildRoundButton(
                   icon: Icons.check_circle,
                   tooltip: "Tasks",
                   onPressed: () => navigateToTaskManagement(context),
                 ),
               ),
+              // New Camera Button
+              _buildRoundButton(
+                icon: _showCamera ? Icons.camera_enhance : Icons.camera_alt,
+                tooltip: _showCamera ? "Stop Camera" : "Start Camera",
+                onPressed: () async {
+                  if (!_showCamera) {
+                    final initialized = await _cameraService.initializeCamera();
+                    if (initialized) {
+                      setState(() => _showCamera = true);
+                      await _cameraService.startStreaming();
+                      LogsManager.addLog(message: "Started camera stream", source: "System");
+                    }
+                  } else {
+                    await _cameraService.stopStreaming();
+                    setState(() => _showCamera = false);
+                    LogsManager.addLog(message: "Stopped camera stream", source: "System");
+                  }
+                },
+              ),
               Padding(
-                padding: const EdgeInsets.only(right: 24.0), // Add padding for right alignment
+                padding: const EdgeInsets.only(right: 24.0),
                 child: _buildRoundButton(
                   icon: Icons.health_and_safety,
                   tooltip: "Health",
@@ -401,7 +530,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(right: 24.0), // Add padding for right alignment
+                padding: const EdgeInsets.only(right: 24.0),
                 child: _buildRoundButton(
                   icon: Icons.person,
                   tooltip: "Profile",
@@ -416,5 +545,11 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 }
