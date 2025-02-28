@@ -27,7 +27,7 @@ class ComingSoonPanel extends StatelessWidget {
         children: [
           const Center(
             child: Text(
-              'Coming Soon',
+              'Camera Stream',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 24,

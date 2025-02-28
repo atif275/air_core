@@ -470,20 +470,38 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 8), // Reduced space between rows
 
           // Second Row Buttons
-          // Second Row Buttons
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween, // Align to the left and right
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Padding(
-                padding: const EdgeInsets.only(left: 24.0), // Add padding for left alignment
+                padding: const EdgeInsets.only(left: 24.0),
                 child: _buildRoundButton(
                   icon: Icons.check_circle,
                   tooltip: "Tasks",
                   onPressed: () => navigateToTaskManagement(context),
                 ),
               ),
+              // New Camera Button
+              _buildRoundButton(
+                icon: _showCamera ? Icons.camera_enhance : Icons.camera_alt,
+                tooltip: _showCamera ? "Stop Camera" : "Start Camera",
+                onPressed: () async {
+                  if (!_showCamera) {
+                    final initialized = await _cameraService.initializeCamera();
+                    if (initialized) {
+                      setState(() => _showCamera = true);
+                      await _cameraService.startStreaming();
+                      LogsManager.addLog(message: "Started camera stream", source: "System");
+                    }
+                  } else {
+                    await _cameraService.stopStreaming();
+                    setState(() => _showCamera = false);
+                    LogsManager.addLog(message: "Stopped camera stream", source: "System");
+                  }
+                },
+              ),
               Padding(
-                padding: const EdgeInsets.only(right: 24.0), // Add padding for right alignment
+                padding: const EdgeInsets.only(right: 24.0),
                 child: _buildRoundButton(
                   icon: Icons.health_and_safety,
                   tooltip: "Health",
@@ -516,20 +534,9 @@ class _HomePageState extends State<HomePage> {
                 child: _buildRoundButton(
                   icon: Icons.person,
                   tooltip: "Profile",
-                  onPressed: () async {
-                  if (!_showCamera) {
-                    final initialized = await _cameraService.initializeCamera();
-                    if (initialized) {
-                      setState(() => _showCamera = true);
-                      await _cameraService.startStreaming();
-                      LogsManager.addLog(message: "Started camera stream", source: "System");
-                    }
-                  } else {
-                    await _cameraService.stopStreaming();
-                    setState(() => _showCamera = false);
-                    LogsManager.addLog(message: "Stopped camera stream", source: "System");
-                  }
-                },
+                  onPressed: () {
+                    LogsManager.addLog(message: "Opened Profile Page", source: "User");
+                  },
                 ),
               ),
             ],
