@@ -6,7 +6,7 @@
     },
     "camera": {
         "url": "rtsp://Atif:27516515@192.168.1.12/live",
-        "display_window": true
+        "display_window": false
     },
     "monitoring": {
         "update_interval": 1.0,
