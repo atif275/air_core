@@ -114,4 +114,15 @@ def run_server():
     asyncio.run(server.start_server())
 
 if __name__ == "__main__":
-    run_server() 
+    # Replace with your Wyze cam RTSP URL
+    CAMERA_URL = "rtsp://Atif:27516515@192.168.1.12/live"
+    
+    # Make sure the server is running on 0.0.0.0
+    server = MonitoringWebSocket(host="0.0.0.0", port=8765)
+    try:
+        asyncio.run(server.start_server())
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    finally:
+        if server.system_monitor:
+            server.system_monitor.stop_monitoring() 
