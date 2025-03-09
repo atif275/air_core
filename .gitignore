@@ -29,7 +29,9 @@ air_mobile_app/server/pi/src/camera/__pycache__/
 air_mobile_app/server/pi/src/websocket/__pycache__/
 air_mobile_app/server/pi/src/camera/__pycache__/*.pyc
 air_mobile_app/server/pi/src/websocket/__pycache__/*.pyc
-air_brain/pi/src/logs/
+air_brain/pi/src/*.pyc
+air_brain/pi/src/*.log
+air_brain/pi/src/logs/*.log
 *.log
 *.tmp
 *.swp
