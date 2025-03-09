@@ -25,6 +25,8 @@ __pycache__/
 air_brain/pi/src/robot_server.log
 air_brain/pi/src/websocket/__pycache__/
 air_brain/pi/src/robot_server.log
+air_brain/pi/src/config/robot_config.json
+air_mobile_app/server/pi/src/config/robot_config.json
 air_mobile_app/server/pi/src/camera/__pycache__/
 air_mobile_app/server/pi/src/websocket/__pycache__/
 air_mobile_app/server/pi/src/camera/__pycache__/*.pyc
