@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import '../services/camera_service.dart';
+import 'package:air/services/camera_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:typed_data';
 
 class CameraOverlay extends StatefulWidget {
   final CameraService cameraService;
@@ -22,74 +23,94 @@ class _CameraOverlayState extends State<CameraOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      top: MediaQuery.of(context).size.height * 0.00, // Adjusted from 0.05 to 0.02
-      left: 0,
-      right: 0,
-      child: Center(
-        child: Container(
-          width: 300,
-          height: 400,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 10,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              // Camera Preview
-              ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: widget.cameraService.controller != null
-                    ? CameraPreview(widget.cameraService.controller!)
-                    : Container(
-                        color: Colors.black87,
-                        child: const Center(
-                          child: Text(
-                            'Initializing camera...',
-                            style: TextStyle(color: Colors.white),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          children: [
+            // Camera Preview
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12.0),
+                child: widget.cameraService.isRobotCamera
+                    ? StreamBuilder<Uint8List>(
+                        stream: widget.cameraService.imageStream,
+                        builder: (context, snapshot) {
+                          print('Stream builder update: ${snapshot.hasData}');
+                          if (!snapshot.hasData) {
+                            return Container(
+                              color: Colors.black87,
+                              child: const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      'Connecting to robot camera...',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+                          print('Rendering new frame');
+                          return Image.memory(
+                            snapshot.data!,
+                            gaplessPlayback: true,
+                            fit: BoxFit.cover,
+                          );
+                        },
+                      )
+                    : widget.cameraService.controller != null
+                        ? CameraPreview(widget.cameraService.controller!)
+                        : Container(
+                            color: Colors.black87,
+                            child: const Center(
+                              child: Text(
+                                'Initializing camera...',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
               ),
-              
-              // Controls Overlay
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.7),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Close Button
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: widget.onClose,
-                      ),
+            ),
+
+            // Controls Overlay
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      Colors.transparent,
                     ],
                   ),
                 ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: widget.onClose,
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

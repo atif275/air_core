@@ -12,14 +12,19 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image/image.dart' as img;
+import 'package:air/services/robot_camera_service.dart';
 
 class CameraService {
   CameraController? controller;
   bool isStreaming = false;
-  WebSocketChannel? _channel;
+  bool isRobotCamera = false;
+  bool _serverReady = false;
   DateTime? _lastFrameTime;
   int _reconnectAttempts = 0;
-  bool _serverReady = false;
+  final RobotCameraService _robotCameraService = RobotCameraService();
+  StreamController<Uint8List> _imageStreamController;
+  WebSocketChannel? _mlServerChannel;
+  bool _isInitialized = false;
   
   static const int MAX_RECONNECT_ATTEMPTS = 5;
   static const Duration RECONNECT_DELAY = Duration(seconds: 2);
@@ -27,183 +32,219 @@ class CameraService {
   static const int MAX_IMAGE_DIMENSION = 640;
   static const int JPEG_QUALITY = 70;
   
-  String get serverUrl {
-    final host = dotenv.env['WEBSOCKET_HOST'] ?? '192.168.56.31';
-    final port = dotenv.env['WEBSOCKET_PORT'] ?? '8765';
+  CameraService() : _imageStreamController = StreamController<Uint8List>.broadcast();
+
+  String get mlServerUrl {
+    final host = dotenv.env['WEBSOCKET_HOST'] ?? 'localhost';
+    final port = dotenv.env['WEBSOCKET_PORT'] ?? '8766';
     return 'ws://$host:$port';
   }
 
   Future<bool> initializeCamera() async {
+    print('Initializing camera...');
+    if (_robotCameraService.isConnectionActive()) {
+      print('Robot camera is active, setting up stream');
+      isRobotCamera = true;
+      _isInitialized = true;
+      _setupRobotCameraStream();
+      print('Robot camera stream setup complete');
+      return true;
+    }
+
+    print('Using device camera');
+    isRobotCamera = false;
     try {
       final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        print('No cameras available');
-        return false;
-      }
+      if (cameras.isEmpty) return false;
 
       controller = CameraController(
         cameras.firstWhere(
           (camera) => camera.lensDirection == CameraLensDirection.front,
           orElse: () => cameras.first,
         ),
-        ResolutionPreset.low, // Lower initial resolution
+        ResolutionPreset.medium,
         enableAudio: false,
-        imageFormatGroup: Platform.isIOS 
-            ? ImageFormatGroup.bgra8888 
-            : ImageFormatGroup.jpeg,
       );
 
       await controller!.initialize();
-      // Disable flash
       await controller!.setFlashMode(FlashMode.off);
-      print('Camera initialized successfully');
+      print('Device camera initialized successfully');
+      _isInitialized = true;
       return true;
     } catch (e) {
-      print('Error in camera initialization: $e');
+      print('Error initializing camera: $e');
       return false;
     }
   }
 
-  Future<void> startStreaming() async {
-    if (controller == null || !controller!.value.isInitialized) {
-      print('Camera not initialized');
-      return;
-    }
-
-    try {
-      await _connectToWebSocket();
-      isStreaming = true;
-      _reconnectAttempts = 0;
-
-      await controller!.startImageStream((CameraImage image) async {
-        if (!isStreaming || !_serverReady) {
-          print('Waiting for server ready signal...');
-          return;
-        }
-
-        // Frame rate limiting
-        final now = DateTime.now();
-        if (_lastFrameTime != null && 
-            now.difference(_lastFrameTime!) < FRAME_INTERVAL) {
-          return;
-        }
-        _lastFrameTime = now;
-
+  void _setupRobotCameraStream() {
+    print('Setting up robot camera stream handler');
+    _robotCameraService.onImageReceived = (imageData) {
+      if (!_imageStreamController.isClosed) {
         try {
-          List<int>? imageBytes;
-          
-          if (Platform.isIOS) {
-            // For iOS: Convert BGRA to JPEG
-            final img.Image? capturedImage = img.Image.fromBytes(
-              width: image.width,
-              height: image.height,
-              bytes: image.planes[0].bytes.buffer,
-              order: img.ChannelOrder.bgra,
-            );
-            
-            if (capturedImage != null) {
-              final img.Image resized = img.copyResize(
-                capturedImage,
-                width: MAX_IMAGE_DIMENSION,
-                height: (MAX_IMAGE_DIMENSION * image.height ~/ image.width),
-              );
-              imageBytes = img.encodeJpg(resized, quality: JPEG_QUALITY);
-            } else {
-              print('Failed to process iOS image');
-              return;
-            }
-          } else {
-            // For Android: Take a picture instead of using image stream
-            final XFile picture = await controller!.takePicture();
-            final bytes = await picture.readAsBytes();
-            final img.Image? capturedImage = img.decodeImage(bytes);
-            
-            if (capturedImage != null) {
-              final img.Image resized = img.copyResize(
-                capturedImage,
-                width: MAX_IMAGE_DIMENSION,
-                height: (MAX_IMAGE_DIMENSION * image.height ~/ image.width),
-              );
-              imageBytes = img.encodeJpg(resized, quality: JPEG_QUALITY);
-              await File(picture.path).delete(); // Clean up temporary file
-            } else {
-              print('Failed to process Android image');
-              return;
-            }
-          }
-
-          if (imageBytes != null) {
-            print('Processed image size: ${imageBytes.length} bytes');
-            final base64Image = base64Encode(imageBytes);
-            print('Base64 size: ${base64Image.length} bytes');
-
-            if (_channel != null && _channel!.sink != null) {
-              _channel!.sink.add(jsonEncode({
-                'type': 'image',
-                'image': base64Image,
-                'timestamp': DateTime.now().millisecondsSinceEpoch,
-              }));
-              print('Frame sent to server');
-            }
-          }
+          print('Processing new frame from robot');
+          final bytes = base64Decode(imageData);
+          print('Decoded base64 frame, size: ${bytes.length} bytes');
+          _imageStreamController.add(bytes);
+          _lastFrameTime = DateTime.now();
+          print('Frame added to stream successfully at ${_lastFrameTime}');
         } catch (e) {
-          print('Error processing image: $e');
+          print('Error processing robot camera image: $e');
         }
-      });
+      }
+    };
 
-    } catch (e) {
-      print('Error starting stream: $e');
-      isStreaming = false;
-      _reconnect();
+    _robotCameraService.onConnectionStatus = (status) {
+      print('Robot camera status: $status');
+    };
+
+    _robotCameraService.onDisconnected = () {
+      print('Robot camera disconnected, stopping stream');
+      stopStreaming();
+    };
+  }
+
+  Stream<Uint8List> get imageStream {
+    if (isRobotCamera) {
+      print('Providing robot camera stream');
+      if (!_isInitialized) {
+        print('Warning: Robot camera not initialized when requesting stream');
+      }
+      if (_imageStreamController.isClosed) {
+        print('Warning: Stream controller is closed, creating new one');
+        _imageStreamController = StreamController<Uint8List>.broadcast();
+      }
+    } else {
+      print('Providing device camera stream');
+      if (!_serverReady) {
+        print('Waiting for server ready signal...');
+      }
+    }
+    return _imageStreamController.stream;
+  }
+
+  void startStreaming() {
+    print('Starting camera stream...');
+    isStreaming = true;
+    _reconnectAttempts = 0;
+    
+    if (isRobotCamera) {
+      print('Enabling robot camera stream via RobotCameraService');
+      _robotCameraService.startStreaming();
+      _setupRobotCameraStream();
+      print('Robot camera stream setup completed');
+    } else {
+      print('Starting device camera stream');
+      _connectToMLServer();
+      _setupDeviceCameraStream();
     }
   }
 
-  Future<void> _connectToWebSocket() async {
+  Future<void> _connectToMLServer() async {
     try {
-      _channel = WebSocketChannel.connect(Uri.parse(serverUrl));
-      print('Connected to WebSocket server');
-      _setupWebSocketListeners();
+      print('Connecting to ML WebSocket server at ${mlServerUrl}');
+      _mlServerChannel = WebSocketChannel.connect(Uri.parse(mlServerUrl));
+      print('Connected to ML WebSocket server');
+      _setupMLServerListeners();
     } catch (e) {
-      print('Error connecting to WebSocket: $e');
+      print('Error connecting to ML WebSocket server: $e');
       throw e;
     }
   }
 
-  void _setupWebSocketListeners() {
-    _channel!.stream.listen(
+  void _setupMLServerListeners() {
+    _mlServerChannel!.stream.listen(
       (message) {
         try {
           final data = jsonDecode(message);
-          print('Received message from server: ${data['type']}');
+          print('Received message from ML server: ${data['type']}');
           
           if (data['type'] == 'ready') {
             _serverReady = true;
-            print('Server is ready to receive frames');
+            print('ML server is ready to receive frames');
           } else if (data['type'] == 'frame_ack') {
-            print('Frame ${data['frame_number']} acknowledged');
+            print('Frame ${data['frame_number']} acknowledged by ML server');
           } else if (data['type'] == 'error') {
-            print('Server error: ${data['message']}');
+            print('ML server error: ${data['message']}');
           }
         } catch (e) {
-          print('Error processing server message: $e');
+          print('Error processing ML server message: $e');
         }
       },
       onError: (error) {
-        print('WebSocket error: $error');
+        print('ML WebSocket error: $error');
         _reconnect();
       },
       onDone: () {
-        print('WebSocket connection closed');
+        print('ML WebSocket connection closed');
         _reconnect();
       },
     );
+  }
+
+  void _setupDeviceCameraStream() async {
+    if (controller == null) return;
+
+    await controller!.startImageStream((image) async {
+      if (!isStreaming || _mlServerChannel == null || !_serverReady) return;
+
+      final now = DateTime.now();
+      if (_lastFrameTime != null &&
+          now.difference(_lastFrameTime!) < FRAME_INTERVAL) {
+        return;
+      }
+      _lastFrameTime = now;
+
+      try {
+        final bytes = await _processImageFrame(image);
+        
+        if (_mlServerChannel != null && _serverReady) {
+          print('Sending frame to ML server');
+          _mlServerChannel!.sink.add(jsonEncode({
+            'type': 'frame',
+            'data': base64Encode(bytes),
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          }));
+        }
+
+        if (!_imageStreamController.isClosed) {
+          _imageStreamController.add(bytes);
+        }
+      } catch (e) {
+        print('Error processing camera frame: $e');
+      }
+    });
+  }
+
+  Future<Uint8List> _processImageFrame(CameraImage image) async {
+    // Implementation of _processImageFrame method
+    // This method should return a Uint8List representing the processed image
+    throw UnimplementedError();
+  }
+
+  void stopStreaming() {
+    print('Stopping camera stream...');
+    isStreaming = false;
+    _serverReady = false;
+    _lastFrameTime = null;
+    
+    if (isRobotCamera) {
+      print('Disabling robot camera stream');
+      _robotCameraService.stopStreaming();
+    } else {
+      print('Stopping device camera stream');
+      controller?.stopImageStream();
+      _mlServerChannel?.sink.close();
+      _mlServerChannel = null;
+    }
+    print('Stream stopped successfully');
   }
 
   Future<void> _reconnect() async {
     if (!isStreaming || _reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       if (_reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         print('Max reconnection attempts reached');
-        await stopStreaming();
+        stopStreaming();
       }
       return;
     }
@@ -212,24 +253,16 @@ class CameraService {
     print('Reconnection attempt $_reconnectAttempts of $MAX_RECONNECT_ATTEMPTS');
     
     await Future.delayed(RECONNECT_DELAY);
-    await stopStreaming();
-    await startStreaming();
-  }
-
-  Future<void> stopStreaming() async {
-    isStreaming = false;
-    _serverReady = false;
-    _lastFrameTime = null;
-    await controller?.stopImageStream();
-    await _channel?.sink.close();
-    _channel = null;
-    print('Stopped streaming');
+    stopStreaming();
+    startStreaming();
   }
 
   void dispose() {
+    print('Disposing camera service');
     stopStreaming();
     controller?.dispose();
-    print('Camera controller disposed');
+    _imageStreamController.close();
+    _isInitialized = false;
   }
 } 
  

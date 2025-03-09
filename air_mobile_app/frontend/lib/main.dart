@@ -20,6 +20,10 @@ import 'package:air/widgets/camera_overlay.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:air/widgets/coming_soon_panel.dart';
 import 'package:air/widgets/swipe_indicator.dart';
+import 'package:air/pages/robot_profile_page.dart';
+import 'package:air/pages/calendar_page.dart';
+import 'package:air/pages/health_page.dart';
+import 'package:air/services/robot_camera_service.dart';
 
 //import 'home_page.dart';
 void main() async {
@@ -46,6 +50,7 @@ class _AirAppState extends State<AirApp> {
   bool isDarkMode = true; // Default to dark mode
   final CameraService _cameraService = CameraService();
   bool _showCamera = false;
+  final RobotCameraService _robotCameraService = RobotCameraService();
 
   void toggleThemeMode() {
     setState(() {
@@ -86,6 +91,7 @@ class _AirAppState extends State<AirApp> {
   @override
   void dispose() {
     _cameraService.dispose();
+    _robotCameraService.dispose();
     super.dispose();
   }
 }
@@ -490,11 +496,17 @@ class _HomePageState extends State<HomePage> {
                     final initialized = await _cameraService.initializeCamera();
                     if (initialized) {
                       setState(() => _showCamera = true);
-                      await _cameraService.startStreaming();
-                      LogsManager.addLog(message: "Started camera stream", source: "System");
+                      if (_cameraService.isRobotCamera) {
+                        print('Starting robot camera stream');
+                        _cameraService.startStreaming();  // This will send the command
+                        LogsManager.addLog(message: "Started robot camera stream", source: "System");
+                      } else {
+                        _cameraService.startStreaming();
+                        LogsManager.addLog(message: "Started device camera stream", source: "System");
+                      }
                     }
                   } else {
-                    await _cameraService.stopStreaming();
+                    _cameraService.stopStreaming();
                     setState(() => _showCamera = false);
                     LogsManager.addLog(message: "Stopped camera stream", source: "System");
                   }
@@ -506,6 +518,12 @@ class _HomePageState extends State<HomePage> {
                   icon: Icons.health_and_safety,
                   tooltip: "Health",
                   onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const HealthPage(),
+                      ),
+                    );
                     LogsManager.addLog(message: "Opened Health Page", source: "User");
                   },
                 ),
@@ -517,14 +535,20 @@ class _HomePageState extends State<HomePage> {
 
           // Third Row Buttons
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween, // Align to the left and right
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Padding(
-                padding: const EdgeInsets.only(left: 24.0), // Add padding for left alignment
+                padding: const EdgeInsets.only(left: 24.0),
                 child: _buildRoundButton(
                   icon: Icons.calendar_today,
                   tooltip: "Calendar",
                   onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CalendarPage(),
+                      ),
+                    );
                     LogsManager.addLog(message: "Opened Calendar Page", source: "User");
                   },
                 ),
@@ -535,7 +559,13 @@ class _HomePageState extends State<HomePage> {
                   icon: Icons.person,
                   tooltip: "Profile",
                   onPressed: () {
-                    LogsManager.addLog(message: "Opened Profile Page", source: "User");
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RobotProfilePage(),
+                      ),
+                    );
+                    LogsManager.addLog(message: "Opened Robot Profile Page", source: "User");
                   },
                 ),
               ),
