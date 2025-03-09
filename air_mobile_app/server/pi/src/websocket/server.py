@@ -20,11 +20,25 @@ from monitoring.system_monitor import SystemMonitor
 logger = logging.getLogger(__name__)
 
 class WebSocketServer:
-    def __init__(self, host: str = "0.0.0.0", port: int = 8765, camera_url: str = None):
-        self.host = host
-        self.port = port
-        self.clients: Set[websockets.WebSocketServerProtocol] = set()
-        self.camera_manager = CameraManager(camera_url) if camera_url else None
+    def __init__(self, config_path: str = "src/config/robot_config.json"):
+        # Load configuration
+        with open(config_path, 'r') as f:
+            self.config = json.load(f)
+        
+        # Camera settings from config
+        self.camera_url = self.config['camera']['url']
+        self.display_window = self.config['camera']['display_window']
+        
+        # Initialize camera manager with display setting
+        self.camera_manager = CameraManager(
+            camera_url=self.camera_url,
+            is_display_window=self.display_window
+        )
+        
+        # Other initializations...
+        self.host = self.config['server']['host']
+        self.port = self.config['server']['port']
+        self.clients = set()
         self.system_monitor = SystemMonitor()
         self.running = False
         self.last_heartbeat = {}
@@ -181,35 +195,22 @@ class WebSocketServer:
                 }))
 
             elif command == "start_streaming":
-                if self.camera_manager:
-                    # Initialize camera if needed
-                    if not self.camera_manager.video_capture:
-                        success = self.camera_manager.init_camera()
-                        if not success:
-                            await websocket.send(json.dumps({
-                                'type': 'error',
-                                'message': 'Failed to initialize camera'
-                            }))
-                            return
-
-                    # Start streaming
-                    success = self.camera_manager.start_streaming()
-                    if success:
-                        # Start frame streaming task
-                        if not self.frame_task:
-                            self.frame_task = asyncio.create_task(self.stream_frames())
-                            logger.info("Frame broadcasting task started")
-
+                if not self.camera_manager.is_streaming:
+                    # Initialize camera (non-async method)
+                    if self.camera_manager.init_camera():  # Remove await here
+                        self.camera_manager.start_streaming()
+                        self.frame_task = asyncio.create_task(self.stream_frames())
+                        logger.info("Frame broadcasting task started")
                         await websocket.send(json.dumps({
-                            'type': 'command_response',
-                            'action': 'start_streaming',
-                            'status': 'success',
-                            'message': 'Streaming started'
+                            "type": "command_response",
+                            "action": "start_streaming",
+                            "status": "success",
+                            "message": "Streaming started"
                         }))
                     else:
                         await websocket.send(json.dumps({
-                            'type': 'error',
-                            'message': 'Failed to start streaming'
+                            "type": "error",
+                            "message": "Failed to initialize camera"
                         }))
             
             elif command == "stop_streaming":

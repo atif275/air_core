@@ -11,4 +11,26 @@
 .env
 .env.*
 
+# Ignore all log files
+*.log
+
+# Ignore Python cache directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# Ignore logs and cache files for specific folders (if needed)
+air_brain/pi/src/robot_server.log
+air_brain/pi/src/websocket/__pycache__/
+air_brain/pi/src/robot_server.log
+air_mobile_app/server/pi/src/camera/__pycache__/
+air_mobile_app/server/pi/src/websocket/__pycache__/
+air_mobile_app/server/pi/src/camera/__pycache__/*.pyc
+air_mobile_app/server/pi/src/websocket/__pycache__/*.pyc
+air_brain/pi/src/logs/
+*.log
+*.tmp
+*.swp
 

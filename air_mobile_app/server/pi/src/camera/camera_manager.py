@@ -125,6 +125,19 @@ class CameraManager:
         frame_count = 0
         last_time = time.time()
         
+        # Create display window if enabled
+        if self.is_display_window:
+            try:
+                # Create window with specific flags to ensure visibility
+                cv2.namedWindow("Live Camera Feed", cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO | cv2.WINDOW_GUI_EXPANDED)
+                cv2.resizeWindow("Live Camera Feed", 640, 480)
+                # Move window to a visible position on screen
+                cv2.moveWindow("Live Camera Feed", 100, 100)
+                logger.info("Display window created successfully")
+            except Exception as e:
+                logger.error(f"Failed to create display window: {e}")
+                self.is_display_window = False  # Disable display window on error
+        
         while self.is_streaming:
             if self.video_capture is None or not self.video_capture.isOpened():
                 logger.error("Camera disconnected")
@@ -143,6 +156,21 @@ class CameraManager:
             # Resize frame
             frame = cv2.resize(frame, (640, 480))
             frame_count += 1
+            
+            # Display frame if enabled and window was created successfully
+            if self.is_display_window:
+                try:
+                    cv2.imshow("Live Camera Feed", frame)
+                    # Bring window to front periodically
+                    if frame_count % 30 == 0:
+                        cv2.setWindowProperty("Live Camera Feed", cv2.WND_PROP_TOPMOST, 1)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == 27:  # ESC key to quit
+                        self.is_streaming = False
+                        break
+                except Exception as e:
+                    logger.error(f"Error displaying frame: {e}")
+                    self.is_display_window = False  # Disable display on error
             
             if frame_count % 30 == 0:  # Log stats every 30 frames
                 logger.debug(f"Frame capture rate: {1/frame_time:.1f} FPS")

@@ -1,6 +1,6 @@
 import cv2
 
-video = cv2.VideoCapture("rtsp://Atif:27516515@10.0.4.165/live")
+video = cv2.VideoCapture("rtsp://Atif:27516515@192.168.1.9/live")
 
 
 while True:
