@@ -164,18 +164,30 @@ def parse_arguments():
     return parser.parse_args()
 
 async def main():
-    # Replace with your Wyze cam RTSP URL
-    CAMERA_URL = "rtsp://Atif:27516515@192.168.1.12/live"
+    # Load configuration
+    args = parse_arguments()
+    config_path = args.config
     
-    # Make sure the server is running on 0.0.0.0
-    server = WebSocketServer(
-        host="0.0.0.0",  # Explicitly bind to all interfaces
-        port=8765,
-        camera_url=CAMERA_URL
-    )
+    # Create default config if it doesn't exist
+    if not os.path.exists(config_path):
+        create_default_config(config_path)
+    
+    # Load configuration
+    config = load_config(config_path)
+    
+    # Override config with command line arguments
+    if args.camera_url:
+        config['camera']['url'] = args.camera_url
+    if args.port:
+        config['server']['port'] = args.port
+    if args.display:
+        config['camera']['display_window'] = True
+        
+    # Initialize and start server
+    server = WebSocketServer(config_path=config_path)
     
     try:
-        logger.info(f"Starting server on 0.0.0.0:8765")
+        logger.info(f"Starting server on {config['server']['host']}:{config['server']['port']}")
         await server.start()
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
