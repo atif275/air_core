@@ -8,13 +8,14 @@ import threading
 import queue
 import sys
 import subprocess
+from typing import Optional
 
 logger = logging.getLogger('CameraManager')
 # Configure logging to show more details
 logging.basicConfig(level=logging.DEBUG)
 
 class CameraManager:
-    def __init__(self, camera_url: str, is_display_window: bool = False):
+    def __init__(self, camera_url: str, is_display_window: bool = False, max_retries: int = 3):
         logger.info(f"Initializing CameraManager with URL: {camera_url}")
         self.camera_url = camera_url
         self.video_capture = None
@@ -23,86 +24,116 @@ class CameraManager:
         self.frame_queue = queue.Queue(maxsize=3)  # Buffer 3 frames max
         self.frame_thread = None
         self.frame_interval = 1/15  # Target 15 FPS
+        self.max_retries = max_retries
+        self.current_retry = 0
 
     def test_rtsp_connection(self) -> bool:
-        """Test RTSP connection using ffmpeg"""
-        try:
-            logger.info(f"Testing RTSP connection to {self.camera_url}")
-            
-            # Use ffmpeg to test RTSP connection
-            command = [
-                'ffprobe',
-                '-v', 'error',
-                '-rtsp_transport', 'tcp',  # Try TCP first
-                '-i', self.camera_url,
-                '-show_entries',
-                'stream=width,height',
-                '-of', 'json'
-            ]
-            
-            process = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=5
-            )
-            
-            if process.returncode == 0:
-                logger.info("RTSP connection test successful")
-                return True
-            else:
-                logger.error(f"RTSP connection test failed: {process.stderr.decode()}")
-                return False
+        """Test RTSP connection using ffmpeg with retry logic"""
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(f"Testing RTSP connection to {self.camera_url} (Attempt {attempt + 1}/{self.max_retries})")
                 
-        except subprocess.TimeoutExpired:
-            logger.error("RTSP connection test timed out")
-            return False
-        except Exception as e:
-            logger.error(f"Error testing RTSP connection: {e}")
-            return False
+                # Use ffmpeg to test RTSP connection
+                command = [
+                    'ffprobe',
+                    '-v', 'error',
+                    '-rtsp_transport', 'tcp',  # Try TCP first
+                    '-i', self.camera_url,
+                    '-show_entries',
+                    'stream=width,height',
+                    '-of', 'json'
+                ]
+                
+                process = subprocess.run(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=10  # Increased timeout to 10 seconds
+                )
+                
+                if process.returncode == 0:
+                    logger.info("RTSP connection test successful")
+                    return True
+                else:
+                    error_msg = process.stderr.decode()
+                    logger.warning(f"RTSP connection test failed (Attempt {attempt + 1}): {error_msg}")
+                    # If this is not the last attempt, wait before retrying
+                    if attempt < self.max_retries - 1:
+                        time.sleep(2)  # Wait 2 seconds between attempts
+                    
+            except subprocess.TimeoutExpired:
+                logger.warning(f"RTSP connection test timed out (Attempt {attempt + 1})")
+                if attempt < self.max_retries - 1:
+                    time.sleep(2)
+            except Exception as e:
+                logger.error(f"Error testing RTSP connection (Attempt {attempt + 1}): {e}")
+                if attempt < self.max_retries - 1:
+                    time.sleep(2)
+        
+        logger.error("All RTSP connection attempts failed")
+        return False
 
     def init_camera(self) -> bool:
         """Initialize camera without starting stream"""
-        try:
-            if self.video_capture is None:
-                logger.info(f"Initializing camera at {self.camera_url}")
-                
-                # First test the RTSP connection
-                if self.camera_url.startswith('rtsp://'):
-                    if not self.test_rtsp_connection():
-                        logger.error("RTSP connection test failed")
+        for attempt in range(self.max_retries):
+            try:
+                if self.video_capture is None:
+                    logger.info(f"Initializing camera at {self.camera_url} (Attempt {attempt + 1}/{self.max_retries})")
+                    
+                    # First test the RTSP connection
+                    if self.camera_url.startswith('rtsp://'):
+                        if not self.test_rtsp_connection():
+                            if attempt < self.max_retries - 1:
+                                time.sleep(2)
+                                continue
+                            return False
+                    
+                    # Simple initialization with FFMPEG backend
+                    self.video_capture = cv2.VideoCapture(self.camera_url, cv2.CAP_FFMPEG)
+                    
+                    if not self.video_capture.isOpened():
+                        logger.warning(f"Failed to open camera (Attempt {attempt + 1}) - camera not accessible")
+                        if attempt < self.max_retries - 1:
+                            time.sleep(2)
+                            continue
                         return False
-                
-                # Try to open the camera with different backend options
-                self.video_capture = cv2.VideoCapture(self.camera_url)
-                
-                if not self.video_capture.isOpened():
-                    logger.error("Failed to open camera - camera not accessible")
-                    return False
-                
-                # Configure camera properties
-                self.video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                self.video_capture.set(cv2.CAP_PROP_FPS, 30)
-                
-                # Test first frame
-                ret, frame = self.video_capture.read()
-                if not ret or frame is None:
-                    logger.error("Could not read first frame from camera")
+                    
+                    # Configure camera properties
+                    self.video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    self.video_capture.set(cv2.CAP_PROP_FPS, 30)
+                    
+                    # Test first frame with timeout
+                    start_time = time.time()
+                    while time.time() - start_time < 5:  # 5 second timeout for first frame
+                        ret, frame = self.video_capture.read()
+                        if ret and frame is not None:
+                            logger.info("Camera initialized successfully")
+                            return True
+                        time.sleep(0.1)
+                    
+                    logger.warning(f"Could not read first frame (Attempt {attempt + 1})")
                     self.video_capture.release()
                     self.video_capture = None
+                    
+                    if attempt < self.max_retries - 1:
+                        time.sleep(2)
+                        continue
+                    
                     return False
                     
-                logger.info("Camera initialized successfully")
-                return True
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize camera: {str(e)}", exc_info=True)
-            if self.video_capture:
-                self.video_capture.release()
-            self.video_capture = None
-            return False
+            except Exception as e:
+                logger.error(f"Failed to initialize camera (Attempt {attempt + 1}): {str(e)}", exc_info=True)
+                if self.video_capture:
+                    self.video_capture.release()
+                self.video_capture = None
+                if attempt < self.max_retries - 1:
+                    time.sleep(2)
+                    continue
+                return False
+        
+        return False
 
     def start_streaming(self) -> bool:
         """Start streaming frames"""
@@ -122,22 +153,24 @@ class CameraManager:
         """Stop streaming frames but keep camera initialized"""
         if self.is_streaming:
             self.is_streaming = False
-            if self.frame_thread:
-                self.frame_thread.join(timeout=1.0)
-            self.frame_thread = None
+            logger.info("Camera streaming stopped")
             
-            # Clear frame queue
+            # Wait for frame thread to finish
+            if self.frame_thread and self.frame_thread.is_alive():
+                self.frame_thread.join(timeout=2.0)
+                
+            # Properly release the camera to ensure it can be reinitialized
+            if self.video_capture:
+                self.video_capture.release()
+                self.video_capture = None
+                
+            # Clear the frame queue
             while not self.frame_queue.empty():
                 try:
                     self.frame_queue.get_nowait()
                 except queue.Empty:
                     break
                     
-            # Only destroy windows if display was enabled
-            if self.is_display_window:
-                cv2.destroyAllWindows()
-                
-            logger.info("Camera streaming stopped")
             return True
         return False
 
@@ -240,9 +273,27 @@ class CameraManager:
 
     def cleanup(self):
         """Clean up resources"""
-        self.stop_streaming()
+        self.is_streaming = False
+        
+        # Wait for frame thread to finish
+        if self.frame_thread and self.frame_thread.is_alive():
+            self.frame_thread.join(timeout=2.0)
+            
+        # Release camera
         if self.video_capture:
             self.video_capture.release()
             self.video_capture = None
+            
+        # Close any OpenCV windows
         if self.is_display_window:
-            cv2.destroyAllWindows() 
+            try:
+                cv2.destroyAllWindows()
+            except:
+                pass
+                
+        # Clear the frame queue
+        while not self.frame_queue.empty():
+            try:
+                self.frame_queue.get_nowait()
+            except queue.Empty:
+                break 
