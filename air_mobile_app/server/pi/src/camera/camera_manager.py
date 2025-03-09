@@ -7,11 +7,15 @@ from datetime import datetime
 import threading
 import queue
 import sys
+import subprocess
 
 logger = logging.getLogger('CameraManager')
+# Configure logging to show more details
+logging.basicConfig(level=logging.DEBUG)
 
 class CameraManager:
     def __init__(self, camera_url: str, is_display_window: bool = False):
+        logger.info(f"Initializing CameraManager with URL: {camera_url}")
         self.camera_url = camera_url
         self.video_capture = None
         self.is_streaming = False
@@ -62,24 +66,41 @@ class CameraManager:
         try:
             if self.video_capture is None:
                 logger.info(f"Initializing camera at {self.camera_url}")
+                
+                # First test the RTSP connection
+                if self.camera_url.startswith('rtsp://'):
+                    if not self.test_rtsp_connection():
+                        logger.error("RTSP connection test failed")
+                        return False
+                
+                # Try to open the camera with different backend options
                 self.video_capture = cv2.VideoCapture(self.camera_url)
+                
+                if not self.video_capture.isOpened():
+                    logger.error("Failed to open camera - camera not accessible")
+                    return False
+                
+                # Configure camera properties
                 self.video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                 self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 self.video_capture.set(cv2.CAP_PROP_FPS, 30)
                 
-                if not self.video_capture.isOpened():
-                    raise Exception("Failed to open camera stream")
-                
                 # Test first frame
-                ret, _ = self.video_capture.read()
-                if not ret:
-                    raise Exception("Could not read first frame")
+                ret, frame = self.video_capture.read()
+                if not ret or frame is None:
+                    logger.error("Could not read first frame from camera")
+                    self.video_capture.release()
+                    self.video_capture = None
+                    return False
                     
                 logger.info("Camera initialized successfully")
                 return True
+                
         except Exception as e:
-            logger.error(f"Failed to initialize camera: {e}")
+            logger.error(f"Failed to initialize camera: {str(e)}", exc_info=True)
+            if self.video_capture:
+                self.video_capture.release()
             self.video_capture = None
             return False
 

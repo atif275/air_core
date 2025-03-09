@@ -1,1 +1,3 @@
-# Empty file to mark directory as Python package 
+from .server import WebSocketServer
+
+__all__ = ['WebSocketServer'] 

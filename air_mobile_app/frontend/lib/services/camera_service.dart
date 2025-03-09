@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:io' show Platform;
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -13,6 +14,7 @@ import 'dart:typed_data';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image/image.dart' as img;
 import 'package:air/services/robot_camera_service.dart';
+import 'dart:math' as math;
 
 class CameraService {
   CameraController? controller;
@@ -62,8 +64,11 @@ class CameraService {
           (camera) => camera.lensDirection == CameraLensDirection.front,
           orElse: () => cameras.first,
         ),
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
+        imageFormatGroup: Platform.isIOS 
+            ? ImageFormatGroup.bgra8888 
+            : ImageFormatGroup.jpeg,
       );
 
       await controller!.initialize();
@@ -74,6 +79,23 @@ class CameraService {
     } catch (e) {
       print('Error initializing camera: $e');
       return false;
+    }
+  }
+
+  void startStreaming() {
+    print('Starting camera stream...');
+    isStreaming = true;
+    _reconnectAttempts = 0;
+    
+    if (isRobotCamera) {
+      print('Enabling robot camera stream via RobotCameraService');
+      _robotCameraService.startStreaming();
+      _setupRobotCameraStream();
+      print('Robot camera stream setup completed');
+    } else {
+      print('Starting device camera stream');
+      _connectToMLServer();
+      _setupDeviceCameraStream();
     }
   }
 
@@ -121,23 +143,6 @@ class CameraService {
       }
     }
     return _imageStreamController.stream;
-  }
-
-  void startStreaming() {
-    print('Starting camera stream...');
-    isStreaming = true;
-    _reconnectAttempts = 0;
-    
-    if (isRobotCamera) {
-      print('Enabling robot camera stream via RobotCameraService');
-      _robotCameraService.startStreaming();
-      _setupRobotCameraStream();
-      print('Robot camera stream setup completed');
-    } else {
-      print('Starting device camera stream');
-      _connectToMLServer();
-      _setupDeviceCameraStream();
-    }
   }
 
   Future<void> _connectToMLServer() async {
@@ -201,8 +206,8 @@ class CameraService {
         if (_mlServerChannel != null && _serverReady) {
           print('Sending frame to ML server');
           _mlServerChannel!.sink.add(jsonEncode({
-            'type': 'frame',
-            'data': base64Encode(bytes),
+            'type': 'image',
+            'image': base64Encode(bytes),
             'timestamp': DateTime.now().millisecondsSinceEpoch,
           }));
         }
@@ -217,9 +222,75 @@ class CameraService {
   }
 
   Future<Uint8List> _processImageFrame(CameraImage image) async {
-    // Implementation of _processImageFrame method
-    // This method should return a Uint8List representing the processed image
-    throw UnimplementedError();
+    try {
+      List<int>? imageBytes;
+      
+      if (Platform.isIOS) {
+        // For iOS: Convert BGRA to JPEG
+        final img.Image? capturedImage = img.Image.fromBytes(
+          width: image.width,
+          height: image.height,
+          bytes: image.planes[0].bytes.buffer,
+          order: img.ChannelOrder.bgra,
+        );
+        
+        if (capturedImage != null) {
+          final img.Image resized = img.copyResize(
+            capturedImage,
+            width: MAX_IMAGE_DIMENSION,
+            height: (MAX_IMAGE_DIMENSION * image.height ~/ image.width),
+          );
+          imageBytes = img.encodeJpg(resized, quality: JPEG_QUALITY);
+        } else {
+          throw Exception('Failed to process iOS image');
+        }
+      } else {
+        // For Android: Process YUV data
+        final img.Image capturedImage = img.Image(width: image.width, height: image.height);
+        
+        final Uint8List yPlane = image.planes[0].bytes;
+        final Uint8List uPlane = image.planes[1].bytes;
+        final Uint8List vPlane = image.planes[2].bytes;
+        
+        final int yRowStride = image.planes[0].bytesPerRow;
+        final int uvRowStride = image.planes[1].bytesPerRow;
+        final int uvPixelStride = image.planes[1].bytesPerPixel!;
+
+        for (int y = 0; y < image.height; y++) {
+          for (int x = 0; x < image.width; x++) {
+            final int yIndex = y * yRowStride + x;
+            final int uvIndex = (y ~/ 2) * uvRowStride + (x ~/ 2) * uvPixelStride;
+
+            final int yp = yPlane[yIndex];
+            final int up = uPlane[uvIndex];
+            final int vp = vPlane[uvIndex];
+
+            int r = (yp + 1.402 * (vp - 128)).round().clamp(0, 255);
+            int g = (yp - 0.344136 * (up - 128) - 0.714136 * (vp - 128)).round().clamp(0, 255);
+            int b = (yp + 1.772 * (up - 128)).round().clamp(0, 255);
+
+            capturedImage.setPixelRgb(x, y, r, g, b);
+          }
+        }
+
+        final img.Image resized = img.copyResize(
+          capturedImage,
+          width: MAX_IMAGE_DIMENSION,
+          height: (MAX_IMAGE_DIMENSION * image.height ~/ image.width),
+        );
+        imageBytes = img.encodeJpg(resized, quality: JPEG_QUALITY);
+      }
+
+      if (imageBytes != null) {
+        print('Processed image size: ${imageBytes.length} bytes');
+        return Uint8List.fromList(imageBytes);
+      } else {
+        throw Exception('Failed to process image');
+      }
+    } catch (e) {
+      print('Error in _processImageFrame: $e');
+      rethrow;
+    }
   }
 
   void stopStreaming() {

@@ -32,6 +32,8 @@ air_mobile_app/server/pi/src/websocket/__pycache__/*.pyc
 air_brain/pi/src/*.pyc
 air_brain/pi/src/*.log
 air_brain/pi/src/logs/*.log
+air_mobile_app/server/pi/src/websocket/__init__.py
+air_brain/pi/src/websocket/__init__.py
 *.log
 *.tmp
 *.swp
