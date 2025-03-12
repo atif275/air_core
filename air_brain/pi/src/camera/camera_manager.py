@@ -9,13 +9,16 @@ import queue
 import sys
 import subprocess
 from typing import Optional
+import asyncio
+import websockets
+import os
 
 logger = logging.getLogger('CameraManager')
 # Configure logging to show more details
 logging.basicConfig(level=logging.DEBUG)
 
 class CameraManager:
-    def __init__(self, camera_url: str, is_display_window: bool = False, max_retries: int = 3):
+    def __init__(self, camera_url: str, is_display_window: bool = False, max_retries: int = 3, ml_config=None):
         logger.info(f"Initializing CameraManager with URL: {camera_url}")
         self.camera_url = camera_url
         self.video_capture = None
@@ -26,6 +29,107 @@ class CameraManager:
         self.frame_interval = 1/15  # Target 15 FPS
         self.max_retries = max_retries
         self.current_retry = 0
+        
+        # ML Server configuration - completely separate from main streaming
+        self.ml_config = ml_config
+        self.ml_enabled = ml_config and ml_config.get('enabled', False)
+        self.ml_websocket = None
+        self.ml_connected = False
+        self.ml_thread = None
+        self.ml_frame_queue = queue.Queue(maxsize=10)  # Buffer for ML frames
+        self.last_ml_frame_time = 0
+        self.ml_frame_interval = 1.0 / ml_config.get('max_fps', 2) if ml_config else 0.5  # Default to 2 FPS
+        
+        # Initialize ML server connection if enabled
+        if self.ml_enabled:
+            self.init_ml_connection()
+
+    def init_ml_connection(self):
+        """Initialize connection to ML server in a separate thread"""
+        if not self.ml_enabled or not self.ml_config:
+            logger.warning("ML server is not enabled or configured")
+            return False
+            
+        # Create and start the ML connection thread
+        self.ml_thread = threading.Thread(target=self._ml_connection_thread, daemon=True)
+        self.ml_thread.start()
+        logger.info("ML connection thread started")
+        return True
+        
+    def _ml_connection_thread(self):
+        """Thread to maintain connection with ML server and send frames"""
+        ml_host = self.ml_config.get('host', '127.0.0.1')
+        ml_port = self.ml_config.get('port', 8765)
+        ml_uri = f"ws://{ml_host}:{ml_port}"
+        
+        logger.info(f"Starting ML connection thread to {ml_uri}")
+        
+        # Create a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        async def connect_and_send():
+            while True:
+                if not self.ml_enabled or not self.is_streaming:
+                    logger.info("ML server disabled or streaming stopped, pausing ML connection")
+                    await asyncio.sleep(1.0)
+                    continue
+                    
+                try:
+                    logger.info(f"Connecting to ML server at {ml_uri}")
+                    async with websockets.connect(ml_uri, max_size=2**25, ping_interval=None) as websocket:
+                        self.ml_websocket = websocket
+                        self.ml_connected = True
+                        logger.info("Connected to ML server")
+                        
+                        # Wait for ready message
+                        try:
+                            response = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                            response_data = json.loads(response)
+                            if response_data.get('type') == 'ready':
+                                logger.info("ML server is ready to receive frames")
+                        except (asyncio.TimeoutError, Exception) as e:
+                            logger.warning(f"Did not receive ready message from ML server: {e}")
+                        
+                        # Process frames from the queue while connected
+                        while self.ml_connected and self.ml_enabled and self.is_streaming:
+                            try:
+                                # Non-blocking get with timeout
+                                frame_data = self.ml_frame_queue.get(timeout=1.0)
+                                
+                                # Send frame to ML server
+                                await websocket.send(json.dumps(frame_data))
+                                
+                                # Don't wait for acknowledgment - this was causing delays
+                                # Just continue processing the next frame
+                                
+                            except queue.Empty:
+                                # No frames in queue, just continue
+                                await asyncio.sleep(0.1)
+                            except Exception as e:
+                                logger.error(f"Error processing ML frame: {e}")
+                                await asyncio.sleep(1.0)
+                                
+                except websockets.exceptions.ConnectionClosed:
+                    logger.warning("ML server connection closed")
+                except Exception as e:
+                    logger.error(f"ML connection error: {e}")
+                
+                # Reset connection state
+                self.ml_websocket = None
+                self.ml_connected = False
+                
+                # Wait before reconnecting
+                logger.info("Waiting 5 seconds before reconnecting to ML server")
+                await asyncio.sleep(5)
+        
+        # Run the async function in the thread's event loop
+        try:
+            loop.run_until_complete(connect_and_send())
+        except Exception as e:
+            logger.error(f"ML connection thread error: {e}")
+        finally:
+            loop.close()
 
     def test_rtsp_connection(self) -> bool:
         """Test RTSP connection using ffmpeg with retry logic"""
@@ -137,7 +241,7 @@ class CameraManager:
 
     def start_streaming(self) -> bool:
         """Start streaming frames"""
-        if not self.is_streaming and self.video_capture:
+        if not self.is_streaming and self.init_camera():
             self.is_streaming = True
             logger.info("Starting camera stream")
             
@@ -229,7 +333,7 @@ class CameraManager:
             if frame_count % 30 == 0:  # Log stats every 30 frames
                 logger.debug(f"Frame capture rate: {1/frame_time:.1f} FPS")
             
-            # Update frame queue (drop frames if queue is full)
+            # Update frame queue for client streaming (drop frames if queue is full)
             try:
                 self.frame_queue.put((frame, current_time), block=False)
             except queue.Full:
@@ -238,6 +342,38 @@ class CameraManager:
                     self.frame_queue.put((frame, current_time), block=False)
                 except:
                     pass
+            
+            # Handle ML frame separately - only if ML is enabled and connected
+            # This is done in a non-blocking way to avoid affecting main streaming
+            if self.ml_enabled and self.ml_connected:
+                current_ml_time = time.time()
+                if current_ml_time - self.last_ml_frame_time >= self.ml_frame_interval:
+                    # Process ML frame in a separate thread to avoid blocking the main capture thread
+                    threading.Thread(
+                        target=self._process_ml_frame,
+                        args=(frame.copy(), current_ml_time, frame_count),
+                        daemon=True
+                    ).start()
+                    self.last_ml_frame_time = current_ml_time
+
+    def _process_ml_frame(self, frame, timestamp, frame_count):
+        """Process a frame for ML in a separate thread to avoid blocking the main capture thread"""
+        try:
+            # Convert frame to JPEG for ML server
+            _, buffer = cv2.imencode('.jpg', frame)
+            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+            
+            # Add to ML queue if not full
+            if not self.ml_frame_queue.full():
+                self.ml_frame_queue.put({
+                    'type': 'image',
+                    'image': jpg_as_text,
+                    'frame_number': frame_count,
+                    'timestamp': int(timestamp * 1000)
+                })
+                logger.debug(f"Processed frame {frame_count} for ML server")
+        except Exception as e:
+            logger.error(f"Error processing ML frame: {e}")
 
     async def get_frame(self) -> dict:
         """Get the next frame as a JSON-compatible dictionary"""
@@ -246,7 +382,6 @@ class CameraManager:
             
             # Convert to JPEG
             encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
-            encode_start = time.time()
             _, buffer = cv2.imencode('.jpg', frame, encode_param)
             jpg_as_text = base64.b64encode(buffer).decode('utf-8')
             
@@ -268,6 +403,8 @@ class CameraManager:
             "is_connected": self.video_capture.isOpened() if self.video_capture else False,
             "frame_queue_size": self.frame_queue.qsize(),
             "camera_url": self.camera_url,
+            "ml_enabled": self.ml_enabled,
+            "ml_connected": self.ml_connected,
             "timestamp": datetime.now().isoformat()
         }
 
@@ -296,4 +433,12 @@ class CameraManager:
             try:
                 self.frame_queue.get_nowait()
             except queue.Empty:
-                break 
+                break
+                
+        # Disconnect from ML server
+        if self.ml_enabled:
+            self.ml_enabled = False
+            self.ml_connected = False
+            # Wait for ML thread to finish
+            if self.ml_thread and self.ml_thread.is_alive():
+                self.ml_thread.join(timeout=2.0) 

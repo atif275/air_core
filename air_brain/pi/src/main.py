@@ -75,7 +75,8 @@ class RobotServer:
                 host=self.config['server']['host'],
                 port=self.config['server']['port'],
                 camera_url=self.config['camera'].get('url'),
-                heartbeat_interval=self.config['server'].get('heartbeat_interval', 30)
+                heartbeat_interval=self.config['server'].get('heartbeat_interval', 30),
+                config_path=os.path.join(current_dir, "config", "robot_config.json")
             )
 
             # Start server

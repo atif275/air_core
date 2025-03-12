@@ -5,11 +5,17 @@
         "heartbeat_interval": 30
     },
     "camera": {
-        "url": "rtsp://Atif:27516515@192.168.1.12/live",
+        "url": "rtsp://Atif:27516515@192.168.1.14/live",
         "display_window": false
     },
     "monitoring": {
         "update_interval": 1.0,
         "enable_diagnostics": true
+    },
+    "ml_server": {
+        "enabled": true,
+        "host": "192.168.1.11",
+        "port": 8765,
+        "max_fps": 10
     }
 }

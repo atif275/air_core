@@ -20,24 +20,31 @@ from monitoring.system_monitor import SystemMonitor
 logger = logging.getLogger(__name__)
 
 class WebSocketServer:
-    def __init__(self, config_path: str = "src/config/robot_config.json"):
+    def __init__(self, host="0.0.0.0", port=8766, camera_url=None, heartbeat_interval=30, config_path: str = "src/config/robot_config.json"):
         # Load configuration
         with open(config_path, 'r') as f:
             self.config = json.load(f)
         
+        # Override with constructor parameters if provided
+        self.host = host or self.config['server']['host']
+        self.port = port or self.config['server']['port']
+        
         # Camera settings from config
-        self.camera_url = self.config['camera']['url']
+        self.camera_url = camera_url or self.config['camera']['url']
         self.display_window = self.config['camera']['display_window']
         
-        # Initialize camera manager with display setting
+        # ML server configuration
+        self.ml_config = self.config.get('ml_server', {'enabled': False})
+        logger.info(f"ML Server configuration: {self.ml_config}")
+        
+        # Initialize camera manager with display setting and ML config
         self.camera_manager = CameraManager(
             camera_url=self.camera_url,
-            is_display_window=self.display_window
+            is_display_window=self.display_window,
+            ml_config=self.ml_config
         )
         
         # Other initializations...
-        self.host = self.config['server']['host']
-        self.port = self.config['server']['port']
         self.clients = set()
         self.system_monitor = SystemMonitor()
         self.running = False
@@ -45,7 +52,8 @@ class WebSocketServer:
         self.frame_interval = 1/30  # Target 30 FPS
         self.frame_task = None
         self.monitoring_task = None
-        self.monitoring_interval = 1.0  # Update system stats every second
+        self.monitoring_interval = self.config['monitoring'].get('update_interval', 1.0)
+        self.heartbeat_interval = heartbeat_interval or self.config['server'].get('heartbeat_interval', 30)
 
     async def register(self, websocket):
         """Register a new client connection"""
@@ -67,69 +75,39 @@ class WebSocketServer:
     async def stream_frames(self):
         """Stream frames to all connected clients"""
         frame_count = 0
-        last_time = time.time()
-        
-        if self.camera_manager.is_display_window:
-            cv2.namedWindow("Robot Camera Stream", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("Robot Camera Stream", 640, 480)
-        
         try:
-            while self.running and self.camera_manager.is_streaming and self.clients:
+            while self.running and self.clients:
                 try:
-                    # Get frame from queue
-                    frame, capture_time = self.camera_manager.frame_queue.get_nowait()
-                    frame_count += 1
+                    # Get frame from camera
+                    frame_data = await self.camera_manager.get_frame()
                     
-                    if self.camera_manager.is_display_window:
-                        try:
-                            cv2.imshow("Robot Camera Stream", frame)
-                            key = cv2.waitKey(1) & 0xFF
-                            if key == 27:  # ESC key to quit
-                                break
-                        except Exception as e:
-                            logger.error(f"Display error: {e}")
-                    
-                    # Convert to JPEG
-                    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
-                    encode_start = time.time()
-                    _, buffer = cv2.imencode('.jpg', frame, encode_param)
-                    jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-                    
-                    # Log processing times periodically
-                    if frame_count % 30 == 0:
-                        current_time = time.time()
-                        encode_time = current_time - encode_start
-                        total_time = current_time - last_time
-                        last_time = current_time
-                        logger.debug(
-                            f"Frame stats - Size: {len(jpg_as_text)} bytes, "
-                            f"Encode time: {encode_time*1000:.1f}ms, "
-                            f"Rate: {30/total_time:.1f} FPS"
-                        )
-                    
-                    # Prepare frame data
-                    frame_data = json.dumps({
-                        'type': 'image',
-                        'image': jpg_as_text,
-                        'timestamp': datetime.now().isoformat(),
-                        'frame_number': frame_count
-                    })
-
-                    # Send to all clients
+                    if 'error' in frame_data:
+                        logger.warning(f"Error getting frame: {frame_data['error']}")
+                        await asyncio.sleep(0.1)
+                        continue
+                        
+                    # Broadcast frame to all clients
                     if self.clients:
                         await asyncio.gather(
-                            *[client.send(frame_data) for client in self.clients],
+                            *[client.send(json.dumps(frame_data)) 
+                              for client in self.clients],
                             return_exceptions=True
                         )
-
-                    await asyncio.sleep(self.frame_interval)
-
-                except queue.Empty:
-                    await asyncio.sleep(0.001)
+                        frame_count += 1
+                        
+                    # Control frame rate
+                    await asyncio.sleep(0.01)  # Small sleep to prevent CPU hogging
+                    
                 except Exception as e:
-                    logger.error(f"Error in stream_frames: {e}")
+                    logger.error(f"Error streaming frame: {e}")
                     await asyncio.sleep(0.1)
                     
+            logger.info("Streaming stopped - no clients connected or server stopped")
+            
+        except asyncio.CancelledError:
+            logger.info("Frame streaming task cancelled")
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
         finally:
             if self.camera_manager.is_display_window:
                 cv2.destroyAllWindows()
@@ -170,6 +148,11 @@ class WebSocketServer:
             elif command == "get_system_status":
                 # Send immediate system status with all metrics
                 status = self.system_monitor.get_full_status()
+                
+                # Add camera and ML server status
+                camera_status = self.camera_manager.get_status()
+                status['camera_status'] = camera_status
+                
                 await websocket.send(json.dumps({
                     'type': 'system_status',
                     'data': status,
@@ -196,11 +179,13 @@ class WebSocketServer:
 
             elif command == "start_streaming":
                 if not self.camera_manager.is_streaming:
-                    # Initialize camera (non-async method)
-                    if self.camera_manager.init_camera():  # Remove await here
-                        self.camera_manager.start_streaming()
-                        self.frame_task = asyncio.create_task(self.stream_frames())
-                        logger.info("Frame broadcasting task started")
+                    # Start streaming
+                    if self.camera_manager.start_streaming():
+                        # Start frame broadcasting task
+                        if self.frame_task is None or self.frame_task.done():
+                            self.frame_task = asyncio.create_task(self.stream_frames())
+                            logger.info("Frame broadcasting task started")
+                        
                         await websocket.send(json.dumps({
                             "type": "command_response",
                             "action": "start_streaming",
@@ -212,6 +197,14 @@ class WebSocketServer:
                             "type": "error",
                             "message": "Failed to initialize camera"
                         }))
+                else:
+                    # Already streaming
+                    await websocket.send(json.dumps({
+                        "type": "command_response",
+                        "action": "start_streaming",
+                        "status": "success",
+                        "message": "Already streaming"
+                    }))
             
             elif command == "stop_streaming":
                 if self.camera_manager:
@@ -238,6 +231,9 @@ class WebSocketServer:
 
     async def handle_client(self, websocket):
         """Handle client connection"""
+        client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+        logger.info(f"New client connection from {client_info}")
+        
         await self.register(websocket)
         try:
             # Send initial connection success
@@ -247,28 +243,41 @@ class WebSocketServer:
                 'message': 'Connected successfully',
                 'timestamp': datetime.now().isoformat()
             }))
+            logger.info(f"Sent connection success to client {client_info}")
 
             async for message in websocket:
                 try:
-                    logger.debug(f"Received message: {message}")
+                    logger.debug(f"Received message from {client_info}: {message[:100]}...")
                     data = json.loads(message)
                     await self.handle_command(websocket, data)
                 except json.JSONDecodeError:
-                    logger.error("Invalid message format")
+                    logger.error(f"Invalid message format from {client_info}")
+                    await websocket.send(json.dumps({
+                        'type': 'error',
+                        'message': 'Invalid message format'
+                    }))
                 except Exception as e:
-                    logger.error(f"Error processing message: {e}")
+                    logger.error(f"Error processing message from {client_info}: {e}")
+                    await websocket.send(json.dumps({
+                        'type': 'error',
+                        'message': f'Error processing message: {str(e)}'
+                    }))
                     
-        except websockets.exceptions.ConnectionClosed:
-            logger.info("Client connection closed unexpectedly")
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.info(f"Client connection closed: {client_info} - {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error with client {client_info}: {e}")
         finally:
             await self.unregister(websocket)
+            logger.info(f"Client disconnected: {client_info}")
 
     async def start(self):
         """Start the WebSocket server"""
         self.running = True
         
         try:
-            async with websockets.serve(
+            logger.info(f"Starting WebSocket server on ws://{self.host}:{self.port}")
+            server = await websockets.serve(
                 self.handle_client,
                 self.host,
                 self.port,
@@ -276,16 +285,19 @@ class WebSocketServer:
                 compression=None,  # Disable compression for better performance
                 ping_interval=20,
                 ping_timeout=30
-            ):
-                logger.info(f"WebSocket server started on ws://{self.host}:{self.port}")
-                await asyncio.Future()  # run forever
+            )
+            
+            logger.info(f"WebSocket server started successfully on ws://{self.host}:{self.port}")
+            await asyncio.Future()  # run forever
                 
         except Exception as e:
             logger.error(f"Server error: {e}")
+            raise  # Re-raise to allow proper shutdown
         finally:
             self.running = False
             if self.camera_manager:
                 self.camera_manager.cleanup()
+            logger.info("WebSocket server stopped")
 
     async def broadcast_system_stats(self):
         """Broadcast system statistics to all connected clients"""
