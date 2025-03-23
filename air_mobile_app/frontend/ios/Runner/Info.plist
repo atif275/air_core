@@ -42,6 +42,16 @@
 	<string>AIR needs photo library access to save captured images</string>
 	<key>Privacy - Camera Usage Description</key>
 	<string>AIR needs camera access to enable video streaming features</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Location access is needed for task locations and reminders</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Location access is required for task locations</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Location access is needed for task locations and reminders</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>We need calendar access to schedule task reminders and sync with your calendar</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>We need reminders access to set task notifications and reminders</string>
 
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
@@ -65,6 +75,9 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app needs access to local network for debugging purposes.</string>
@@ -99,5 +112,11 @@
 		<string>armv7</string>
 		<string>camera</string>
 	</array>
+	<key>UNUserNotificationCenterDelegate</key>
+	<string>$(PRODUCT_MODULE_NAME).AppDelegate</string>
+	<key>UNNotificationDefaultActionIdentifier</key>
+	<string>com.air.notification.default</string>
+	<key>UNNotificationDismissActionIdentifier</key>
+	<string>com.air.notification.dismiss</string>
 </dict>
 </plist>
