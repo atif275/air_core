@@ -20,6 +20,28 @@ class CameraOverlay extends StatefulWidget {
 
 class _CameraOverlayState extends State<CameraOverlay> {
   bool _isFlashOn = false;
+  bool _isSwitchingCamera = false;
+
+  void _handleCameraSwitch() async {
+    if (_isSwitchingCamera) return;
+    
+    setState(() => _isSwitchingCamera = true);
+    
+    try {
+      final success = await widget.cameraService.switchCamera();
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to switch camera')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error switching camera: $e')),
+      );
+    } finally {
+      setState(() => _isSwitchingCamera = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +128,20 @@ class _CameraOverlayState extends State<CameraOverlay> {
                       icon: const Icon(Icons.close, color: Colors.white),
                       onPressed: widget.onClose,
                     ),
+                    if (!widget.cameraService.isRobotCamera)
+                      IconButton(
+                        icon: _isSwitchingCamera
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.flip_camera_ios, color: Colors.white),
+                        onPressed: _isSwitchingCamera ? null : _handleCameraSwitch,
+                      ),
                   ],
                 ),
               ),
