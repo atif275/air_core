@@ -27,6 +27,8 @@ class CameraService {
   StreamController<Uint8List> _imageStreamController;
   WebSocketChannel? _mlServerChannel;
   bool _isInitialized = false;
+  CameraDescription? _currentCamera;
+  List<CameraDescription> _cameras = [];
   
   static const int MAX_RECONNECT_ATTEMPTS = 5;
   static const Duration RECONNECT_DELAY = Duration(seconds: 2);
@@ -56,14 +58,24 @@ class CameraService {
     print('Using device camera');
     isRobotCamera = false;
     try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) return false;
+      final allCameras = await availableCameras();
+      if (allCameras.isEmpty) return false;
+
+      // Filter to only get the main back and front cameras
+      _cameras = allCameras.where((camera) {
+        // Only include the first back camera and first front camera
+        return camera.lensDirection == CameraLensDirection.back ||
+               camera.lensDirection == CameraLensDirection.front;
+      }).toList();
+
+      // Start with front camera by default
+      _currentCamera = _cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => _cameras.first,
+      );
 
       controller = CameraController(
-        cameras.firstWhere(
-          (camera) => camera.lensDirection == CameraLensDirection.front,
-          orElse: () => cameras.first,
-        ),
+        _currentCamera!,
         ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: Platform.isIOS 
@@ -78,6 +90,49 @@ class CameraService {
       return true;
     } catch (e) {
       print('Error initializing camera: $e');
+      return false;
+    }
+  }
+
+  Future<bool> switchCamera() async {
+    if (isRobotCamera || _cameras.isEmpty || _cameras.length < 2) {
+      return false;
+    }
+
+    try {
+      // Stop current stream if active
+      final wasStreaming = isStreaming;
+      if (wasStreaming) {
+        stopStreaming();
+      }
+
+      // Switch between front and back camera only
+      _currentCamera = _cameras.firstWhere(
+        (camera) => camera.lensDirection != _currentCamera!.lensDirection,
+        orElse: () => _cameras.first,
+      );
+
+      // Initialize new camera
+      controller = CameraController(
+        _currentCamera!,
+        ResolutionPreset.low,
+        enableAudio: false,
+        imageFormatGroup: Platform.isIOS 
+            ? ImageFormatGroup.bgra8888 
+            : ImageFormatGroup.jpeg,
+      );
+
+      await controller!.initialize();
+      await controller!.setFlashMode(FlashMode.off);
+
+      // Restart streaming if it was active
+      if (wasStreaming) {
+        startStreaming();
+      }
+
+      return true;
+    } catch (e) {
+      print('Error switching camera: $e');
       return false;
     }
   }
