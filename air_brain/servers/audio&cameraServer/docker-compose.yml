@@ -1,0 +1,33 @@
+services:
+  flask_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.flask
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+  websocket_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.websocket
+    ports:
+      - "8765:8765"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY_MODE=${DISPLAY_MODE:-none}
+      - SAVE_DIR=/app/frames
+    volumes:
+      - ./frames:/app/frames
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+
+volumes:
+  frames_data: 
