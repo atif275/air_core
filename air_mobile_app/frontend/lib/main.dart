@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
+import 'package:provider/provider.dart';
 import 'settings_page.dart'; // Import the SettingsPage file
 import 'logs.dart'; // Import the LogsPage file
 import 'logs_manager.dart'; // Import LogsManager for logging functionality
@@ -24,19 +25,90 @@ import 'package:air/pages/robot_profile_page.dart';
 import 'package:air/pages/calendar_page.dart';
 import 'package:air/pages/health_page.dart';
 import 'package:air/services/robot_camera_service.dart';
+import 'package:air/pages/task2_page.dart'; // Import the new Task2Page
+import 'package:air/view_models/task_view_model.dart'; // Import the TaskViewModel
+import 'package:air/services/notification_service.dart';
+import 'dart:developer' as developer;
+import 'dart:io'; // Add this import for Platform
 
 //import 'home_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load();
   
-  // Only request microphone and speech at startup
-  await [
-    Permission.microphone,
-    Permission.speech,
-  ].request();
+  // Initialize notification service
+  developer.log('Main: Initializing notification service...', name: 'Main');
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+
+  // Request permissions on app start
+  await _requestInitialPermissions();
   
-  runApp(const AirApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => TaskViewModel()),
+      ],
+      child: const AirApp(),
+    ),
+  );
+}
+
+Future<void> _requestInitialPermissions() async {
+  developer.log('Requesting initial permissions...', name: 'Permissions');
+  
+  // Request notification permission first
+  final notificationStatus = await Permission.notification.request();
+  developer.log(
+    'Notification permission status: ${notificationStatus.name}',
+    name: 'Permissions'
+  );
+
+  // Request calendar and reminders permissions
+  final calendarStatus = await Permission.calendar.request();
+  developer.log(
+    'Calendar permission status: ${calendarStatus.name}',
+    name: 'Permissions'
+  );
+
+  final remindersStatus = await Permission.reminders.request();
+  developer.log(
+    'Reminders permission status: ${remindersStatus.name}',
+    name: 'Permissions'
+  );
+
+  // Request location permissions
+  final locationStatus = await Permission.location.request();
+  developer.log(
+    'Location permission status: ${locationStatus.name}',
+    name: 'Permissions'
+  );
+
+  // Request other permissions based on platform
+  if (Platform.isIOS) {
+    final permissions = [
+      Permission.camera,
+      Permission.microphone,
+      Permission.speech,
+    ];
+
+    for (var permission in permissions) {
+      final status = await permission.request();
+      developer.log(
+        '${permission.toString()} status: ${status.name}',
+        name: 'Permissions'
+      );
+    }
+  }
+
+  // Check if background processing is enabled
+  if (Platform.isIOS) {
+    final backgroundStatus = await Permission.ignoreBatteryOptimizations.request();
+    developer.log(
+      'Background processing status: ${backgroundStatus.name}',
+      name: 'Permissions'
+    );
+  }
 }
 
 class AirApp extends StatefulWidget {
@@ -172,7 +244,7 @@ class _HomePageState extends State<HomePage> {
       if (context.mounted) {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => TasksHomePage()),
+          MaterialPageRoute(builder: (context) => const Task2Page()),
         );
       }
     } catch (e) {
@@ -552,6 +624,20 @@ class _HomePageState extends State<HomePage> {
                     LogsManager.addLog(message: "Opened Calendar Page", source: "User");
                   },
                 ),
+              ),
+              // New Task2 Button
+              _buildRoundButton(
+                icon: Icons.assignment,
+                tooltip: "Task Management",
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const Task2Page(),
+                    ),
+                  );
+                  LogsManager.addLog(message: "Opened Task Management Page", source: "User");
+                },
               ),
               Padding(
                 padding: const EdgeInsets.only(right: 24.0),
