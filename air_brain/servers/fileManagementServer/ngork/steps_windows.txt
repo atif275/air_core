@@ -1,0 +1,99 @@
+
+===============================
+🚀 NGROK SSH SETUP GUIDE (Windows)
+===============================
+
+This guide helps you set up secure remote SSH access to your **Windows PC** using Ngrok and a PowerShell or Bash script.
+
+✅ Requirements:
+- Windows 10 or 11
+- Internet connection
+- Ngrok account (free)
+- OpenSSH Server installed (comes with Windows)
+
+--------------------------------------
+🔐 STEP 1: Register & Get Ngrok Token
+--------------------------------------
+
+1. Go to: https://ngrok.com/signup
+2. Create a free account and verify your email
+3. After login, visit: https://dashboard.ngrok.com/get-started/setup
+4. Copy your **Auth Token**
+
+Example: `2LZoVxxxxx9cfH9_abcXYZtuv....`
+
+--------------------------------------
+💾 STEP 2: Download & Install Ngrok
+--------------------------------------
+
+1. Visit: https://ngrok.com/download
+2. Download the **Windows version**
+3. Unzip the file and move `ngrok.exe` to a known location (e.g., `C:\ngrok`)
+4. Add that folder to your system PATH (optional but recommended)
+5. Test it by running this in PowerShell:
+    ngrok version
+
+--------------------------------------
+🔑 STEP 3: Add Your Auth Token
+--------------------------------------
+
+Run this in PowerShell:
+
+    ngrok config add-authtoken <your_token_here>
+
+Example:
+
+    ngrok config add-authtoken 2LZoVxxxxx9cfH9_abcXYZtuv
+
+--------------------------------------
+🛠 STEP 4: Enable OpenSSH Server (if not running)
+--------------------------------------
+
+1. Go to: **Settings → Apps → Optional Features**
+2. Install **OpenSSH Server**
+3. Open PowerShell as Admin and run:
+    Start-Service sshd
+    Set-Service -Name sshd -StartupType 'Automatic'
+
+--------------------------------------
+⚙️ STEP 5: Run the Tunnel Script
+--------------------------------------
+
+You have two options depending on your environment:
+
+🔵 **Option A: Run PowerShell Script (Recommended)**
+
+1. Download `start_ssh_tunnel.ps1`
+2. Right-click → Run with PowerShell
+   - OR run from terminal:
+     Set-ExecutionPolicy Bypass -Scope Process -Force
+     .\start_ssh_tunnel.ps1
+
+3. You will see a command like:
+
+    ssh yourname@7.tcp.eu.ngrok.io -p 19379
+
+🔵 **Option B: Run Bash Script (if you have Git Bash or WSL)**
+
+1. Download `start_ssh_tunnel.bash`
+2. Open **Git Bash** or **WSL Terminal**
+3. Run:
+    chmod +x start_ssh_tunnel.bash
+    ./start_ssh_tunnel.bash
+
+--------------------------------------
+✅ Example Output
+--------------------------------------
+
+[🔐] Use this SSH command from another computer:
+
+ssh john@7.tcp.eu.ngrok.io -p 19379
+
+[✅] Username auto-filled as: john
+
+--------------------------------------
+🎉 Done!
+--------------------------------------
+
+You can now connect to your Windows PC from anywhere using the SSH command above.
+
