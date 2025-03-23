@@ -3,6 +3,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:air/view model/controller/voice_assistant_controller.dart';
 import 'logs_manager.dart';
+import 'package:air/pages/pc_integration_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -20,6 +22,41 @@ class _SettingsPageState extends State<SettingsPage> {
   bool emailAutomationEnabled = false;
   bool faceRecognitionEnabled = true;
   bool privacyControlsEnabled = true;
+  final _prefs = SharedPreferences.getInstance();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await _prefs;
+    setState(() {
+      pcIntegrationEnabled = prefs.getBool('pc_integration_enabled') ?? false;
+    });
+  }
+
+  Future<void> _togglePCIntegration(bool value) async {
+    final prefs = await _prefs;
+    setState(() {
+      pcIntegrationEnabled = value;
+    });
+    await prefs.setBool('pc_integration_enabled', value);
+
+    if (value && mounted) {
+      // Navigate to PC Integration page when enabled
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const PCIntegrationPage()),
+      ).then((_) {
+        // When returning from PC Integration page, check if we should disable the toggle
+        if (!pcIntegrationEnabled) {
+          setState(() {});
+        }
+      });
+    }
+  }
 
   void _logFeatureToggle(String featureName, bool value) {
     LogsManager.addLog(
@@ -73,18 +110,49 @@ class _SettingsPageState extends State<SettingsPage> {
           const Divider(),
 
           // PC Integration
-          SwitchListTile(
-            title: const Text("PC Integration"),
-            subtitle: const Text("Allow AIR App to access your PC."),
-            value: pcIntegrationEnabled,
-            onChanged: (value) {
-              setState(() {
-                pcIntegrationEnabled = value;
-              });
-              _logFeatureToggle("PC Integration", value);
-            },
-            secondary: const Icon(Icons.computer),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'PC Integration',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
           ),
+          SwitchListTile(
+            title: const Text('Enable PC Integration'),
+            subtitle: const Text('Connect and control AIR from your computer'),
+            value: pcIntegrationEnabled,
+            onChanged: _togglePCIntegration,
+            secondary: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.computer,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+          ),
+          if (pcIntegrationEnabled)
+            ListTile(
+              leading: const SizedBox(width: 40),
+              title: TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PCIntegrationPage(),
+                    ),
+                  );
+                },
+                child: const Text('Open PC Integration Settings'),
+              ),
+            ),
 
           const Divider(),
 
