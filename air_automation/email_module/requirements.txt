@@ -6,3 +6,4 @@ torch
 sympy
 sentence_transformers
 langchain
+langchain-community

@@ -33,10 +33,13 @@ system_prompt = (
     "- If the user requests to respond to a specific email or user, follow this structure:\n"
     "  recipient: <recipient's email address>\n"
     "  subject: <appropriate subject>\n"
-    "  body: <appropriate body text>\n\n"
+    "  body: <appropriate body text>\n"
+    "  attachments: <comma-separated list of file paths>\n\n"
     "  Always end emails with the name: Maaz Asghar.\n\n"
+    "- When attachments are mentioned in the user request, ALWAYS include the attachments: line\n"
+    "  with the correct file path, even if there's only one attachment.\n\n"
     "- Strictly avoid adding any extra symbols or formatting (such as '*', '-', or other characters) before or "
-    "after 'recipient:', 'subject:', or 'body:' as this will affect data retrieval.\n\n"
+    "after 'recipient:', 'subject:', 'body:', or 'attachments:' as this will affect data retrieval.\n\n"
     "- For all other general queries, respond concisely and professionally based on the question."
 )
 
@@ -164,28 +167,41 @@ async def ai_agent_interact():
             break
         elif user_query:
             answer = await ai_query_with_email_context(user_query)
-            print("\033[1;31m\nBot:\033[0m", answer)
+            if "recipient:" in answer and "subject:" in answer and "body:" in answer:
+                print("\033[1;31m\nBot:\033[0m", "\033[1;34m" + answer + "\033[0m")  # Email content in blue
+            else:
+                print("\033[1;31m\nBot:\033[0m", answer)  # Normal responses in default color
 
             # Check if response contains email fields and prompt user
             if "recipient:" in answer and "subject:" in answer and "body:" in answer:
-                confirmation = input("Do you want to send this email? (yes/no): ").strip().lower()
+                confirmation = input("\033[93mDo you want to send this email? (yes/no): \033[0m").strip().lower()
                 if confirmation == "yes":
                     try:
                         # Extract recipient and subject
                         recipient = answer.split("recipient: ")[1].split("\n")[0].strip()
                         subject = answer.split("subject: ")[1].split("\n")[0].strip()
 
-                        # Extract body - everything after 'body:' keyword
+                        # Extract body - everything after 'body:' keyword and before 'attachments:' if present
                         body_start_index = answer.find("body:") + len("body:")
-                        body = answer[body_start_index:].strip().lstrip("\n")
+                        body_end_index = answer.lower().find("attachments:") if "attachments:" in answer.lower() else len(answer)
+                        body = answer[body_start_index:body_end_index].strip().lstrip("\n")
+
+                        # Check for attachments in the response
+                        attachments = []
+                        if "attachments:" in answer.lower():
+                            attachments_start = answer.lower().find("attachments:") + len("attachments:")
+                            attachments_end = answer.find("\n", attachments_start) if "\n" in answer[attachments_start:] else len(answer)
+                            attachments_str = answer[attachments_start:attachments_end].strip()
+                            if attachments_str:
+                                attachments = [path.strip() for path in attachments_str.split(",")]
 
                         # Send email using extracted details
-                        send_email(recipient, subject, body)
-                        print("The email has been sent.")
+                        send_email(recipient, subject, body, attachments)
+                        print("\033[92mThe email has been sent.\033[0m")
                     except IndexError:
                         print("Error: Unable to parse email fields from the response. Please ensure the format is correct.")
                 else:
-                    print("Email sending canceled.")
+                    print("\033[93mEmail sending canceled.\033[0m")
         time.sleep(1)
 
 # Main execution

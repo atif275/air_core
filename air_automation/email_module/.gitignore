@@ -11,5 +11,5 @@ new_env/
 # dotenv
 .env
 .env.*
-
+.venv/
 
