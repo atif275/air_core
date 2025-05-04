@@ -1,0 +1,102 @@
+
+===========================
+🚀 NGROK SSH SETUP GUIDE
+===========================
+
+This guide will help you securely connect to your PC (Mac/Linux) remotely using Ngrok + SSH + a simple script.
+
+✅ Requirements:
+- Internet connection
+- Terminal access
+- Python3 + curl installed
+- SSH server enabled (usually by default on Mac/Linux)
+
+--------------------------
+🔐 STEP 1: Register on Ngrok
+--------------------------
+
+1. Go to: https://ngrok.com/signup
+2. Sign up with email & verify your account
+3. After login, go to your dashboard: https://dashboard.ngrok.com/get-started/setup
+4. Copy your **Auth Token**
+
+Example: `2LZoVxxxxx9cfH9_abcXYZtuv....`
+
+-------------------------------
+💾 STEP 2: Download & Install Ngrok
+-------------------------------
+
+1. Visit: https://ngrok.com/download
+2. Download for **macOS** or **Linux** (depending on your OS)
+3. Unzip the file
+4. Move the `ngrok` binary to your system path:
+
+Mac:
+    sudo mv ngrok /usr/local/bin
+
+Linux:
+    sudo mv ngrok /usr/bin
+
+5. Verify it's working:
+    ngrok version
+
+-------------------------------
+🔑 STEP 3: Add Your Auth Token
+-------------------------------
+
+Paste the token from Step 1:
+
+    ngrok config add-authtoken <your_token_here>
+
+Example:
+
+    ngrok config add-authtoken 2LZoVxxxxx9cfH9_abcXYZtuv
+
+-------------------------------
+🧾 STEP 4: Enable SSH Server (if needed)
+-------------------------------
+
+Mac:
+- Go to **System Preferences → Sharing**
+- Enable **Remote Login**
+
+Linux:
+    sudo service ssh start
+
+-------------------------------
+⚙️ STEP 5: Run the SSH Tunnel Script
+-------------------------------
+
+1. Download the `start_ssh_tunnel.sh` script and place it in a folder
+2. Open Terminal and navigate to that folder
+
+3. Make it executable:
+    chmod +x start_ssh_tunnel.sh
+
+4. Run the script:
+    ./start_ssh_tunnel.sh
+
+5. You will get an SSH command like this:
+
+    ssh yourname@7.tcp.eu.ngrok.io -p 19379
+
+Use this command to paste in the AIR mobile app in PC integration
+Also share the password of your pc/laptop in the password fileds
+
+-------------------------------
+✅ Example Output:
+-------------------------------
+
+[+] Starting Ngrok TCP tunnel on port 22...
+
+[🔐] Use this SSH command from another computer:
+
+ssh john@7.tcp.eu.ngrok.io -p 19379
+
+[✅] Username auto-filled as: john
+
+-------------------------------
+🎉 Done!
+-------------------------------
+
+You can now access your computer securely from anywhere using the SSH command provided.

@@ -149,12 +149,36 @@ class PCIntegrationService {
         Uri.parse('${baseUrl}api/pc/status?connection_id=$_connectionId'),
       );
 
-      final data = jsonDecode(response.body);
-      _connectionStatusController.add(data);
-      return data;
-    } catch (e) {
+      print('Status response: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // Map the new response structure to our expected format
+        final mappedData = {
+          'status': data['state'] ?? 'disconnected',
+          'device_name': data['device_name'],
+          'last_seen': data['last_seen'],
+          'error': data['error'],
+          'metrics': data['metrics'],
+        };
+
+        _connectionStatusController.add(mappedData);
+        return mappedData;
+      }
+
       final errorData = {
-        'status': 'failed',
+        'status': 'disconnected',
+        'device_name': null,
+        'last_seen': null,
+        'error': 'Server returned status code: ${response.statusCode}'
+      };
+      _connectionStatusController.add(errorData);
+      return errorData;
+    } catch (e) {
+      print('Status check error: $e');
+      final errorData = {
+        'status': 'disconnected',
         'device_name': null,
         'last_seen': null,
         'error': e.toString()
@@ -196,7 +220,7 @@ class PCIntegrationService {
     _statusCheckTimer?.cancel();
     _statusCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       final status = await checkStatus();
-      if (status['status'] == 'disconnected' || status['status'] == 'failed') {
+      if (status['status'] != 'connected') {
         _stopStatusCheck();
         _connectionId = null;
         await _saveConnectionState();

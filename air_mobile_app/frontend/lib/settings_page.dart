@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:air/view model/controller/voice_assistant_controller.dart';
 import 'logs_manager.dart';
 import 'package:air/pages/pc_integration_page.dart';
+import 'package:air/pages/email_integration_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -34,6 +35,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await _prefs;
     setState(() {
       pcIntegrationEnabled = prefs.getBool('pc_integration_enabled') ?? false;
+      emailAutomationEnabled = prefs.getBool('email_automation_enabled') ?? false;
     });
   }
 
@@ -52,6 +54,27 @@ class _SettingsPageState extends State<SettingsPage> {
       ).then((_) {
         // When returning from PC Integration page, check if we should disable the toggle
         if (!pcIntegrationEnabled) {
+          setState(() {});
+        }
+      });
+    }
+  }
+
+  Future<void> _toggleEmailAutomation(bool value) async {
+    final prefs = await _prefs;
+    setState(() {
+      emailAutomationEnabled = value;
+    });
+    await prefs.setBool('email_automation_enabled', value);
+
+    if (value && mounted) {
+      // Navigate to Email Integration page when enabled
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const EmailIntegrationPage()),
+      ).then((_) {
+        // When returning from Email Integration page, check if we should disable the toggle
+        if (!emailAutomationEnabled) {
           setState(() {});
         }
       });
@@ -201,18 +224,49 @@ class _SettingsPageState extends State<SettingsPage> {
           const Divider(),
 
           // Email Integration
-          SwitchListTile(
-            title: const Text("Email Automation"),
-            subtitle: const Text("Allow AIR App to manage your emails."),
-            value: emailAutomationEnabled,
-            onChanged: (value) {
-              setState(() {
-                emailAutomationEnabled = value;
-              });
-              _logFeatureToggle("Email Automation", value);
-            },
-            secondary: const Icon(Icons.email),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Email Integration',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
           ),
+          SwitchListTile(
+            title: const Text('Email Automation'),
+            subtitle: const Text('Allow AIR to manage your emails'),
+            value: emailAutomationEnabled,
+            onChanged: _toggleEmailAutomation,
+            secondary: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.email,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+          ),
+          if (emailAutomationEnabled)
+            ListTile(
+              leading: const SizedBox(width: 40),
+              title: TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EmailIntegrationPage(),
+                    ),
+                  );
+                },
+                child: const Text('Open Email Integration Settings'),
+              ),
+            ),
 
           const Divider(),
 

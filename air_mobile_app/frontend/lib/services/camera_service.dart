@@ -32,7 +32,7 @@ class CameraService {
   
   static const int MAX_RECONNECT_ATTEMPTS = 5;
   static const Duration RECONNECT_DELAY = Duration(seconds: 2);
-  static const Duration FRAME_INTERVAL = Duration(milliseconds: 500);
+  static const Duration FRAME_INTERVAL = Duration(milliseconds: 100);
   static const int MAX_IMAGE_DIMENSION = 640;
   static const int JPEG_QUALITY = 70;
   

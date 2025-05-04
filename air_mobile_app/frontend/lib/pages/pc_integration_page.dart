@@ -29,24 +29,24 @@ class _PCIntegrationPageState extends State<PCIntegrationPage> {
 
   // Map OS to zip file names
   final Map<String, String> _osScripts = {
-    'macOS': 'air_connect_macos.zip',
+    'macOS': 'air_connect_macos_linux.zip',
     'Windows': 'air_connect_windows.zip',
-    'Linux': 'air_connect_linux.zip',
+    'Linux': 'air_connect_macos_linux.zip',
   };
   
   // Map OS to script and instruction file names
   final Map<String, Map<String, String>> _osFiles = {
     'macOS': {
-      'script': 'start_sshServer_macos.sh',
-      'instructions': 'steps_for_macos.txt'
+      'script': 'start_ssh_tunnel.sh',
+      'instructions': 'steps.txt'
     },
     'Windows': {
-      'script': 'start_sshServer_windows.bash',
-      'instructions': 'steps_for_windows.txt'
+      'script': 'start_ssh_tunnel.ps1',
+      'instructions': 'steps_windows.txt'
     },
     'Linux': {
-      'script': 'start_sshServer_linux.sh',
-      'instructions': 'steps_for_linux.txt'
+      'script': 'start_ssh_tunnel.sh',
+      'instructions': 'steps.txt'
     },
   };
 

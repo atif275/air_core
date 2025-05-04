@@ -1,0 +1,9 @@
+{
+    "current_connection": {
+        "hostname": "",
+        "port": "",
+        "username": "",
+        "password": ""
+    },
+    "connection_history": []
+}

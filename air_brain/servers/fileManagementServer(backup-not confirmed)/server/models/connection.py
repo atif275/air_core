@@ -6,17 +6,13 @@ import time
 import logging
 from typing import Dict, List, Optional
 from remote_connection import ensure_connection, close_connection, get_connection_status, get_connection_state
-from pathlib import Path
-
-log_dir = Path("../logs")
-log_dir.mkdir(exist_ok=True)
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(log_dir/"connection.log"),
+        logging.FileHandler('connection.log'),
         logging.StreamHandler()
     ]
 )
