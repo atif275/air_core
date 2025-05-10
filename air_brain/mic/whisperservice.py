@@ -115,6 +115,48 @@ class WhisperService:
                     raise
         return None
     
+    def _is_unclear_text(self, text: str) -> bool:
+        """
+        Check if the text indicates unclear content by looking for variations of "Sorry i cant understand".
+        
+        Args:
+            text (str): Text to check
+            
+        Returns:
+            bool: True if text indicates unclear content
+        """
+        # Convert to lowercase for case-insensitive comparison
+        text = text.lower().strip()
+        
+        # List of variations to check for
+        unclear_phrases = [
+            "sorry i cant understand",
+            "sorry i can't understand",
+            "sorry i cannot understand",
+            "sorry, i cant understand",
+            "sorry, i can't understand",
+            "sorry, i cannot understand",
+            "unable to understand",
+            "cannot understand",
+            "can't understand",
+            "cant understand",
+            "not clear",
+            "unclear",
+            "not understandable"
+        ]
+        
+        # Check if any variation is present in the text
+        return any(phrase in text for phrase in unclear_phrases)
+
+    def _standardize_unclear_response(self) -> str:
+        """
+        Return the standard "Sorry i cant understand" phrase.
+        
+        Returns:
+            str: Standard unclear text response
+        """
+        return "Sorry i cant understand"
+
     def transcribe_audio(self, audio_file_path: str) -> Tuple[bool, str, str, Optional[str]]:
         """
         Transcribe an audio file and optionally romanize the text.
@@ -186,14 +228,22 @@ class WhisperService:
             # Handle romanization based on detected language
             romanized_text = None
             if self.romanize:
-                if detected_lang == "en":
-                    # For English text, just copy the original text and log
+                if detected_lang in ["en", "ar"]:  # Skip romanization for both English and Arabic
+                    # For English or Arabic text, just copy the original text and log
                     romanized_text = transcribed_text
-                    self.logger.info("ℹ️  Skipping romanization - text is already in English")
+                    self.logger.info(f"ℹ️  Skipping romanization - text is in {detected_lang}")
                 else:
                     self.logger.info("🔄 Romanizing text...")
                     romanized_text = self._romanize_text(transcribed_text)
                     self.logger.info("✅ Romanization completed")
+                    
+                    # Check if the romanized text indicates unclear content
+                    if self._is_unclear_text(romanized_text):
+                        # Standardize the response
+                        unclear_response = self._standardize_unclear_response()
+                        transcribed_text = unclear_response
+                        romanized_text = unclear_response
+                        self.logger.warning("⚠️ Unclear text detected, marking both original and romanized text as unclear")
             
             return True, transcribed_text, detected_lang, romanized_text
             
@@ -209,7 +259,7 @@ class WhisperService:
             text (str): Text to romanize
             
         Returns:
-            str: Romanized text
+            str: Romanized text or "Sorry i cant understand" for unclear text
         """
         try:
             headers = {
@@ -226,7 +276,24 @@ class WhisperService:
                         'content': '''You are a translator that converts text to Roman script.
                         For Urdu/Hindi, use common romanization.
                         Keep English words unchanged.
-                        Only respond with the romanized text, no explanations.'''
+                        
+                        Rules for handling unclear text:
+                        1. If the text contains repeated words or nonsensical content (like "apar apar apar" or "uh-huh uh-huh"),
+                           or if the text is too short and unclear (like "Ann ch dik"),
+                           return exactly: "Sorry i cant understand"
+                        
+                        2. If the text is slightly unclear but potentially fixable:
+                           - Try to understand the context and correct minor errors
+                           - Do not change the arrangement of words
+                           - Only make minimal corrections to make the text understandable
+                           - Return the corrected and romanized version
+                        
+                        3. For clear and understandable text:
+                           - Convert to Roman script
+                           - Keep English words unchanged
+                           - Return the romanized version
+                        
+                        Only respond with the romanized text or "Sorry i cant understand", no explanations.'''
                     },
                     {
                         'role': 'user',
@@ -247,7 +314,13 @@ class WhisperService:
                 return text
             
             result = response.json()
-            return result['choices'][0]['message']['content'].strip()
+            romanized_text = result['choices'][0]['message']['content'].strip()
+            
+            # Log if the text was unclear
+            if romanized_text == "Sorry i cant understand":
+                self.logger.warning(f"⚠️ Unclear text detected: {text}")
+            
+            return romanized_text
             
         except Exception as e:
             self.logger.error(f"❌ Romanization failed: {str(e)}")

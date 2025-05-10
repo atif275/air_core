@@ -68,7 +68,7 @@ class VoiceActivityDetector:
         self.audio_buffer = []
         self.is_recording = False
         self.audio_queue = queue.Queue()
-        self.transcription_queue = queue.Queue()  # Uncommented transcription queue
+        self.transcription_queue = queue.Queue()
         self.state_history = []  # Track state changes for analysis
         
         # Logging parameters
@@ -83,8 +83,8 @@ class VoiceActivityDetector:
         
         # Create output directories if they don't exist
         self.output_dir = "recordings"
-        self.transcription_dir = "transcriptions"  # Uncommented transcription directory
-        for dir_path in [self.output_dir, self.transcription_dir]:  # Added transcription_dir
+        self.transcription_dir = "transcriptions"
+        for dir_path in [self.output_dir, self.transcription_dir]:
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
         
@@ -93,9 +93,13 @@ class VoiceActivityDetector:
             f.write("timestamp,chunk_counter,vad_probability,energy,adaptive_threshold,energy_threshold,is_speaking,speech_frames,silence_frames\n")
         
         # Start transcription thread
-        self.transcription_thread = threading.Thread(target=self.transcription_worker)  # Uncommented transcription thread
+        self.transcription_thread = threading.Thread(target=self.transcription_worker)
         self.transcription_thread.daemon = True
         self.transcription_thread.start()
+        
+        # Load server configuration from .env
+        self.server_url = os.getenv('SERVER_URL', 'http://192.168.1.9:5001/transcription')
+        self.server_timeout = int(os.getenv('SERVER_TIMEOUT', '10'))
 
     def get_audio_input_device(self):
         """Get the appropriate audio input device"""
@@ -358,6 +362,33 @@ class VoiceActivityDetector:
         # Convert back to int16
         return (resampled * 32768.0).astype(np.int16)
 
+    def _send_transcription(self, text: str, language: str, timestamp: str) -> None:
+        """
+        Send transcription to server in a separate thread.
+        
+        Args:
+            text (str): The romanized text to send
+            language (str): Detected language
+            timestamp (str): Recording timestamp
+        """
+        def send_request():
+            try:
+                response = requests.post(
+                    self.server_url,
+                    json={
+                        'text': text,
+                        'language': language,
+                        'timestamp': timestamp
+                    },
+                    timeout=self.server_timeout
+                )
+                print(f"\n📤 Server response: {response.text}")
+            except Exception as e:
+                print(f"\n❌ Error sending to server: {str(e)}")
+
+        # Start sending in a separate thread
+        threading.Thread(target=send_request, daemon=True).start()
+
     def transcription_worker(self):
         """Worker thread for handling transcriptions"""
         while True:
@@ -373,6 +404,17 @@ class VoiceActivityDetector:
                     success, text, lang, romanized = self.whisper_service.transcribe_audio(wav_file)
                     
                     if success:
+                        # Check if the text is unclear
+                        if text == "Sorry i cant understand":
+                            print("\n⚠️ Unclear audio detected. Skipping file save.")
+                            # Delete the WAV file since we won't be using it
+                            try:
+                                os.remove(wav_file)
+                                print("🗑️ Deleted unclear audio file")
+                            except Exception as e:
+                                print(f"❌ Error deleting file: {str(e)}")
+                            continue
+                            
                         # Save transcription to file
                         base_name = os.path.splitext(os.path.basename(wav_file))[0]
                         txt_file = os.path.join(self.transcription_dir, f"{base_name}.txt")
@@ -381,6 +423,11 @@ class VoiceActivityDetector:
                             f.write(f"Original Text ({lang}):\n{text}\n\n")
                             if romanized:
                                 f.write(f"Romanized Text:\n{romanized}\n")
+                        
+                        # Send transcription to server in parallel
+                        if romanized:
+                            timestamp = base_name.split('_')[1]  # Extract timestamp from filename
+                            self._send_transcription(romanized, lang, timestamp)
                         
                         print(f"\n📝 Transcription saved to {txt_file}")
                         print(f"Language: {lang}")
@@ -419,7 +466,7 @@ class VoiceActivityDetector:
         print(f"✅ Saved recording to {filename}")
         
         # Queue the file for transcription
-        self.transcription_queue.put(filename)  # Uncommented transcription queue
+        self.transcription_queue.put(filename)
         
         # Clear the buffer
         self.audio_buffer = []
@@ -491,8 +538,8 @@ class VoiceActivityDetector:
             self.save_recording()
         
         # Signal transcription thread to stop
-        self.transcription_queue.put(None)  # Uncommented transcription cleanup
-        self.transcription_thread.join()  # Uncommented transcription thread join
+        self.transcription_queue.put(None)
+        self.transcription_thread.join()
 
 if __name__ == "__main__":
     detector = VoiceActivityDetector()
