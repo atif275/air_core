@@ -12,16 +12,94 @@ import time
 from openai import OpenAI
 from dotenv import load_dotenv
 import requests
-from whisperservice import WhisperService  # Add WhisperService import
+from whisperservice import WhisperService
+from flask import Flask, request, jsonify
+import pygame
+import signal
+
+class AudioResponseServer:
+    def __init__(self):
+        self.app = Flask(__name__)
+        self.UPLOAD_FOLDER = 'uploads'
+        os.makedirs(self.UPLOAD_FOLDER, exist_ok=True)
+        self.current_audio_thread = None
+        self.is_playing = False
+        self.playback_lock = threading.Lock()
+        
+        # Initialize pygame mixer
+        pygame.mixer.init()
+        
+        # Set up Flask routes
+        self.app.route('/upload', methods=['POST'])(self.upload_audio)
+        
+    def play_audio(self, filepath):
+        with self.playback_lock:
+            if self.is_playing:
+                pygame.mixer.music.stop()
+            self.is_playing = True
+            
+        try:
+            pygame.mixer.music.load(filepath)
+            pygame.mixer.music.play()
+            
+            # Keep running until music finishes playing
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+                
+        finally:
+            with self.playback_lock:
+                self.is_playing = False
+    
+    def upload_audio(self):
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+
+        file = request.files['file']
+
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+
+        if not file.filename.lower().endswith('.mp3'):
+            return jsonify({'error': 'Only MP3 files are allowed'}), 400
+
+        filepath = os.path.join(self.UPLOAD_FOLDER, file.filename)
+        file.save(filepath)
+
+        # Play audio in a separate thread
+        if self.current_audio_thread and self.current_audio_thread.is_alive():
+            self.current_audio_thread.join(timeout=0.1)
+        
+        self.current_audio_thread = threading.Thread(target=self.play_audio, args=(filepath,))
+        self.current_audio_thread.daemon = True
+        self.current_audio_thread.start()
+
+        return jsonify({'message': f'File {file.filename} uploaded and playing'}), 200
+    
+    def stop_playback(self):
+        with self.playback_lock:
+            if self.is_playing:
+                pygame.mixer.music.stop()
+                self.is_playing = False
+    
+    def run_server(self):
+        self.app.run(host='0.0.0.0', port=5005, debug=False)
 
 class VoiceActivityDetector:
     def __init__(self):
         # Load environment variables
         load_dotenv()
-        self.client = OpenAI()  # Uncommented OpenAI client
+        self.client = OpenAI()
         
         # Initialize WhisperService with romanization enabled
         self.whisper_service = WhisperService(romanize=True, translate_to_english=False)
+        
+        # Initialize audio response server
+        self.audio_server = AudioResponseServer()
+        
+        # Start Flask server in a separate thread
+        self.server_thread = threading.Thread(target=self.audio_server.run_server)
+        self.server_thread.daemon = True
+        self.server_thread.start()
         
         # Audio parameters
         if platform.system() == 'Darwin':  # macOS
@@ -272,6 +350,10 @@ class VoiceActivityDetector:
 
     def process_audio_chunk(self, audio_data):
         """Process audio chunk with enhanced VAD"""
+        # Stop any playing audio when speech is detected
+        if self.is_speaking:
+            self.audio_server.stop_playback()
+            
         # Resample to 16kHz if needed
         if self.RATE != 16000:
             audio_data = self.resample_audio(audio_data)

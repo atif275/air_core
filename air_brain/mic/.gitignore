@@ -36,6 +36,7 @@ logs/
 # Project specific
 recordings/
 transcriptions/
+uploads/
 
 # IDE specific
 .idea/
