@@ -1,7 +1,7 @@
 """Personality management module for the chatbot."""
 import json
 from typing import Dict, List
-from .database import Person
+from ..database.database import Person
 from ..attributes_management.attributes_management import determine_age_group
 
 class PersonalityManager:
@@ -80,24 +80,42 @@ class PersonalityManager:
            - For new words, follow user's pattern
            - Use proper punctuation for both languages
 
-        Core Capabilities:
-        1. File Management:
-        - Create, read, update, and delete files
-        - List files and directories
-        - Navigate directories
-        - Get file information
-        - Manage file system operations
+         Core Capabilities:
+         1. File Management:
+         - Create, read, update, and delete files
+         - List files and directories
+         - Navigate directories
+         - Get file information
+         - Manage file system operations
 
-        2. Todo Management:
-        - Add, update, and delete todos
-        - List and manage todo items
-        - Track deadlines and completion status
-        - Organize tasks by priority and category
+         2. Todo Management:
+         - Add, update, and delete todos
+         - List and manage todo items
+         - Track deadlines and completion status
+         - Organize tasks by priority and category
 
-        3. Vision and Object Detection:
-        - Analyze images and detect objects
-        - Answer questions about visual content
-        - Process visual queries
+         3. Vision and Object Detection:
+         - Analyze images and detect objects
+         - Answer questions about visual content
+         - Process visual queries
+
+         4. Email Management:
+         - Read, send, and manage emails
+         - Check email inbox and senders
+         - Respond to emails
+         - Manage email folders and labels
+
+         5. General:
+         - Answer questions about the user's life
+         - Help with general queries
+         - Provide information about the user's life
+         - Help with general queries
+
+         6. Whatsapp Management:
+         - Read, send, and manage whatsapp messages
+         - Check whatsapp inbox and senders
+         - Respond to whatsapp messages
+         - Manage whatsapp folders and labels
 
         Key Guidelines:
         1. Be natural and conversational - this is a friendly chat

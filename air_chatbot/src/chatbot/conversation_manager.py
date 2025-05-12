@@ -1,7 +1,7 @@
 """Conversation history management module for the chatbot."""
 from typing import Dict, List, Optional
 from datetime import datetime
-from .database import get_database, Conversation
+from ..database.database import get_database, Conversation
 
 class ConversationManager:
     """Manages conversation history and summaries."""

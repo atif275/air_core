@@ -8,6 +8,8 @@ build/
 develop-eggs/
 dist/
 downloads/
+data/
+frames/
 eggs/
 .eggs/
 lib/
@@ -19,6 +21,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.json
 
 # Virtual Environment
 .venv/

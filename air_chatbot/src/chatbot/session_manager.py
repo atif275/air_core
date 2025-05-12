@@ -1,7 +1,7 @@
 """Session management module for the chatbot."""
 from typing import Optional
 from datetime import datetime
-from .database import get_database, Person, Active
+from ..database.database import get_database, Person, Active
 from .interfaces import IMemoryManager
 
 class SessionManager:

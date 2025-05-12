@@ -2,7 +2,7 @@
 from typing import Protocol, Optional
 from datetime import datetime
 from langchain.memory import ConversationBufferMemory
-from .database import Person
+from ..database.database import Person
 
 class IMemoryManager(Protocol):
     """Interface for memory management operations."""

@@ -103,10 +103,10 @@ def test_chatbot():
 
                 print(f"\n🤖 Bot: {bot_response}")
 
-                lang = detect_language(bot_response)
-                print(f"🈯 Detected Language: {lang}")
+                # lang = detect_language(bot_response)
+                # print(f"🈯 Detected Language: {lang}")
 
-                speak(bot_response)
+                # speak(bot_response)
 
             else:
                 print(f"\n❌ Error: API returned status code {response.status_code}")

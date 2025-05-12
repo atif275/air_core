@@ -10,8 +10,6 @@ from ..attributes_management.attributes_management import (
 from .router import QueryType, RouterChain
 from .agent_manager import AgentManager
 from .memory_manager import MemoryManager
-from .vision_manager import VisionManager
-from .response_manager import ResponseManager
 from .personality_manager import PersonalityManager
 from .session_manager import SessionManager
 from .conversation_manager import ConversationManager
@@ -48,12 +46,10 @@ class PersonalizedChatbot:
         # Initialize managers in correct order
         self.router = RouterChain(self.llm)
         self.agent_manager = AgentManager(self.llm)
-        self.vision_manager = VisionManager(self.llm)
         self.personality_manager = PersonalityManager()
         self.conversation_manager = ConversationManager()
         self.session_manager = SessionManager()  # Initialize without memory manager
         self.memory_manager = MemoryManager(self.llm)
-        self.response_manager = ResponseManager(self.memory_manager, self.router)
         
         # Set up bidirectional references
         self.session_manager.set_memory_manager(self.memory_manager)  # Set memory manager in session manager
@@ -83,7 +79,6 @@ class PersonalizedChatbot:
             # Use the router to determine query type
             try:
                 query_type = self.router.route_query(user_input)
-                logger.info(f"Query type determined: {query_type}")
                 
                 # Handle attribute updates if needed
                 attributes = {}
@@ -106,9 +101,6 @@ class PersonalizedChatbot:
                         attributes = {}
                         attributes_updated = False
                 
-                # Check if this is a vision query
-                is_vision_query = self.vision_manager.is_vision_query(user_input)
-                
                 # Get conversation history
                 conversation_history = self.conversation_manager.format_conversation_history(current_person.id)
                 
@@ -122,41 +114,52 @@ class PersonalizedChatbot:
                 input_data = {
                     "input": user_input,
                     "chat_history": self.memory_manager.get_memory(current_person.id).chat_memory.messages if current_person.id in self.memory_manager.get_memory_ids() else [],
-                    "context": {
-                        "person_name": current_person.name,
-                        "person_age": current_person.age,
-                        "is_vision_query": is_vision_query,
-                        "personality_prompt": personality_prompt,
-                        "attr_response": "", # Response manager will handle attribute updates
-                        # Add WhatsApp specific context
-                        "whatsapp_context": {
-                            "person_id": current_person.id,
-                            "person_name": current_person.name,
-                            "conversation_history": conversation_history,
-                            "memory": self.memory_manager.get_memory(current_person.id).chat_memory.messages if current_person.id in self.memory_manager.get_memory_ids() else []
-                        }
-                    }
+                    "personality_prompt": personality_prompt
                 }
-
-                # Get response from the appropriate agent
+                
+                if query_type == QueryType.ATTRIBUTES:
+                    query_type = QueryType.GENERAL
+                    
                 agent = self.agent_manager.get_agent(query_type)
                 if not agent:
                     logger.error(f"No agent found for query type: {query_type}")
                     return f"No agent found for query type: {query_type}"
-                
-                logger.info(f"Invoking {query_type} agent")
-                response = agent.invoke(input_data)
-                logger.info(f"Received response from {query_type} agent")
 
-                # Process the final response using the response manager
-                return self.response_manager.process_response(
-                    response=response,
-                    user_input=user_input,
-                    person_id=current_person.id,
-                    age=current_person.age,
-                    should_update_attributes=attributes_updated,
-                    attributes=attributes
-                )
+                logger.info(f"Invoking {query_type} agent")
+
+                # For LangGraph output (TODO, FILE)
+                if query_type in [QueryType.TODO, QueryType.FILE]:
+                    thread_id = f"user-{current_person.id}"
+                    result = agent.invoke(
+                        {"messages": [{"role": "user", "content": input_data["input"]}]},
+                        {"configurable": {"thread_id": thread_id}}
+                    )
+                    
+                    # Extract final AI message content
+                    messages = result.get("messages", [])
+                    if messages and hasattr(messages[-1], "content"):
+                        response = messages[-1].content
+                    else:
+                        response = "No valid response generated."
+
+                # Email agent: extract input string
+                elif query_type == QueryType.EMAIL or query_type == QueryType.WHATSAPP or query_type == QueryType.VISION:
+                    response = agent(input_data["input"])
+
+                # LangChain agent: use .invoke()
+                elif hasattr(agent, "invoke"):
+                    response = agent.invoke(input_data)
+
+                # Function-style agent
+                else:
+                    response = agent(input_data)
+
+                # Extract content if it's a LangChain message object
+                if hasattr(response, "content"):
+                    response = response.content
+
+                return response
+
                 
             except Exception as e:
                 logger.error(f"Error in query processing: {str(e)}")
@@ -167,55 +170,6 @@ class PersonalizedChatbot:
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
             return "I apologize, but I'm having trouble at the moment. Please try again."
-
-    def get_conversation_history(self, person_id: Optional[int] = None) -> Dict:
-        """Get conversation history for a person."""
-        if person_id is None:
-            current_person = self.session_manager.get_current_person()
-            if current_person:
-                person_id = current_person.id
-        return self.conversation_manager.get_conversation_history(person_id)
-
-    def get_active_user_id(self) -> Optional[int]:
-        """Get the ID of the currently active user."""
-        return self.session_manager.get_active_user_id()
-
-    def switch_active_person(self, person_id: int) -> bool:
-        """
-        Switch the active person to the specified person ID.
-        Returns True if successful, False otherwise.
-        """
-        try:
-            # Store old person's ID before switching
-            old_person_id = self.session_manager.get_current_person().id if self.session_manager.get_current_person() else None
-            
-            # Clear any existing active records
-            self.session_manager.clear_active_person()
-            
-            # Set new active person
-            self.session_manager.switch_active_person(person_id)
-            
-            # Always reinitialize memory for the new person to ensure fresh context
-            if person_id in self.memory_manager.get_memory_ids():
-                # Clear existing memory to force fresh context
-                self.memory_manager.clear_memory(person_id)
-            
-            # Initialize fresh memory with current context
-            self.memory_manager.initialize_memory(person_id)
-            
-            # Update last used timestamp for the new person only
-            self.memory_manager.update_last_used(person_id)
-            
-            # Update last active check time
-            self.session_manager.update_last_active_check()
-            
-            # DO NOT update old person's last_used timestamp
-            # This will allow it to become inactive after 1 minute
-            
-            return True
-        except Exception as e:
-            print(f"Error switching active person: {str(e)}")
-            return False
 
 # Create a singleton instance
 chatbot = PersonalizedChatbot() 

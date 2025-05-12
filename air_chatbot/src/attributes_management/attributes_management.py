@@ -2,7 +2,7 @@ import json
 from typing import Dict, Optional, List
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from ..chatbot.database import get_database, Person
+from ..database.database import get_database, Person
 import os
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -148,22 +148,3 @@ def determine_age_group(input: DetermineAgeGroupInput) -> str:
         return "adult"
     else:
         return "senior"
-
-@tool
-def get_casual_expressions(input: GetCasualExpressionsInput) -> List[str]:
-    """
-    Get casual expressions appropriate for the given age group.
-    
-    Args:
-        input: GetCasualExpressionsInput containing age_group
-        
-    Returns:
-        list: List of casual expressions appropriate for the age group
-    """
-    expressions = {
-        "teenager": ["btw", "lol", "tbh", "ngl", "fr"],
-        "adult": ["actually", "basically", "honestly", "you know"],
-        "senior": ["well", "you see", "mind you", "I must say"],
-        "child": ["wow", "cool", "awesome", "super"]
-    }
-    return expressions.get(input.age_group, [])

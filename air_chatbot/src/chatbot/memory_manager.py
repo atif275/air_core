@@ -7,7 +7,7 @@ import json
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import SystemMessage, AIMessage
 from langchain_openai import ChatOpenAI
-from .database import get_database, Person, Active, Conversation
+from ..database.database import get_database, Person, Active, Conversation
 from .personality_manager import PersonalityManager
 from .conversation_manager import ConversationManager
 from .interfaces import ISessionManager, IMemoryManager
