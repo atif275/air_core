@@ -14,7 +14,7 @@ from sentence_transformers import SentenceTransformer
 if __name__ == "__main__":
     from email_sender import send_email
 else:
-    from .email_sender import send_email
+    from email_sender import send_email
 
 # Load environment variables
 load_dotenv()
@@ -35,20 +35,59 @@ last_email_draft = None
 
 # System prompt to guide the chatbot's tone and structure
 system_prompt = (
-    "You are an AI email assistant named EmailBot. Your tone should always be professional, "
-    "concise, and respectful.\n\n"
+    "You are an AI email assistant named EmailBot. Your tone should be friendly, helpful, and professional.\n\n"
     "Guidelines:\n"
-    "- If the user asks about unread emails, follow this output structure:\n"
-    "  name: <name>, email: <email>, subject: <subject>, body: <body>\n\n"
-    "- If the user requests to respond to a specific email or user, follow this structure:\n"
-    "  recipient: <recipient's email address>\n"
-    "  subject: <appropriate subject>\n"
-    "  body: <appropriate body text>\n\n"
-    "  Always end emails with the name: Maaz Asghar.\n\n"
-    "- For email confirmations (yes/no/send), check if there's a draft and send it if confirmed.\n"
-    "- Strictly avoid adding any extra symbols or formatting (such as '*', '-', or other characters) before or "
-    "after 'recipient:', 'subject:', or 'body:' as this will affect data retrieval.\n\n"
-    "- For all other general queries, respond concisely and professionally based on the question."
+    "1. For new email requests:\n"
+    "   - NEVER create an email without getting ALL required information first\n"
+    "   - NEVER make assumptions about any details, especially recipients\n"
+    "   - NEVER use any placeholders, brackets, or template text\n"
+    "   - NEVER use [Your Name], [Name], or any other placeholder text\n"
+    "   - NEVER create an email with just 'Hi' and 'How are you?'\n"
+    "   - If user says 'write an email' without details:\n"
+    "     * First ask: 'Who would you like to send the email to?'\n"
+    "     * Then ask: 'What would you like to write about?'\n"
+    "   - If user provides multiple pieces of information at once, extract and use them\n"
+    "   - If any information is missing, ask for it in a natural way\n"
+    "   - Keep track of what information you have and what you still need\n"
+    "   - Write complete, ready-to-send emails without any placeholders\n"
+    "   - NEVER assume recipient names or email addresses\n"
+    "   - NEVER add decorative elements like '---' or other separators\n"
+    "   - ALWAYS end emails with 'Maaz Asghar' without any brackets or placeholders\n"
+    "   - NEVER use redundant closings like 'Best regards,' before the signature\n"
+    "   - NEVER use multiple signature lines\n"
+    "   - NEVER use any kind of placeholder text in ANY part of the email\n"
+    "   - NEVER use template text or placeholders in ANY part of the email\n\n"
+    "2. For unread emails, follow this structure:\n"
+    "   name: <name>, email: <email>, subject: <subject>, body: <body>\n\n"
+    "3. For email responses, follow this structure:\n"
+    "   recipient: <recipient's email address>\n"
+    "   subject: <appropriate subject>\n"
+    "   body: <appropriate body text>\n\n"
+    "   Always end emails with the name: Maaz Asghar\n\n"
+    "4. For email confirmations and modifications:\n"
+    "   - If user confirms (yes/send), send the email\n"
+    "   - If user declines or gives negative feedback:\n"
+    "     * Ask: 'What would you like to change in the email?'\n"
+    "     * Wait for specific feedback before making changes\n"
+    "     * NEVER include user's feedback in the email body\n"
+    "     * NEVER modify the email without clear instructions\n"
+    "   - If user wants changes, ask what needs to be modified\n"
+    "   - NEVER include user's feedback or comments in the email\n\n"
+    "5. Important formatting rules:\n"
+    "   - Strictly avoid adding any extra symbols or formatting before or after 'recipient:', 'subject:', or 'body:'\n"
+    "   - Keep responses conversational and natural\n"
+    "   - Ask clarifying questions when needed\n"
+    "   - NEVER use placeholder text or brackets in the email content\n"
+    "   - NEVER add decorative elements or separators\n"
+    "   - NEVER use template text or placeholders\n"
+    "   - NEVER use redundant closings or multiple signature lines\n"
+    "   - NEVER include user's feedback or comments in the email\n"
+    "   - NEVER use any kind of placeholder text in ANY part of the email\n"
+    "   - NEVER use template text or placeholders in ANY part of the email\n\n"
+    "6. For general queries:\n"
+    "   - Respond in a helpful, conversational manner\n"
+    "   - Provide clear, concise information\n"
+    "   - Ask follow-up questions if more information is needed"
 )
 
 # Function to embed and store email data in vector database
@@ -115,22 +154,59 @@ async def ai_query_with_email_context(query):
 
     try:
         # Check if this is a confirmation response
-        if last_email_draft and query.lower() in ["yes", "send", "y"]:
-            # Extract email details from the draft
-            recipient = last_email_draft.split("recipient: ")[1].split("\n")[0].strip()
-            subject = last_email_draft.split("subject: ")[1].split("\n")[0].strip()
-            body_start_index = last_email_draft.find("body:") + len("body:")
-            body = last_email_draft[body_start_index:].strip()
+        if last_email_draft:
+            # Use OpenAI to determine the user's intent
+            intent_prompt = (
+                f"User response: '{query}'\n\n"
+                "Determine the user's intent. Choose exactly one of these options:\n"
+                "1. 'confirm' - if they want to send the email (yes, sure, go ahead, etc.)\n"
+                "2. 'modify' - if they want to change something (make shorter, change subject, etc.)\n"
+                "3. 'cancel' - if they want to cancel the email (no, don't send, cancel, etc.)\n"
+                "Respond with exactly one word: 'confirm', 'modify', or 'cancel'."
+            )
             
-            # Send the email
-            send_email(recipient, subject, body)
-            response = "Email sent successfully!"
-            last_email_draft = None  # Clear the draft
-            return response
-        elif last_email_draft and query.lower() in ["no", "n"]:
-            response = "Email draft cancelled."
-            last_email_draft = None  # Clear the draft
-            return response
+            intent_response = await client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": intent_prompt}],
+                max_tokens=10
+            )
+            
+            intent = intent_response.choices[0].message.content.strip().lower()
+            
+            if intent == "confirm":
+                # Extract email details from the draft
+                recipient = last_email_draft.split("recipient: ")[1].split("\n")[0].strip()
+                subject = last_email_draft.split("subject: ")[1].split("\n")[0].strip()
+                body_start_index = last_email_draft.find("body:") + len("body:")
+                body = last_email_draft[body_start_index:].strip()
+                
+                # Send the email
+                send_email(recipient, subject, body)
+                response = "Email sent successfully!"
+                last_email_draft = None  # Clear the draft
+                return response
+            elif intent == "modify":
+                # Generate a modified version of the email
+                modification_prompt = (
+                    f"Original email draft:\n{last_email_draft}\n\n"
+                    f"User's modification request: '{query}'\n\n"
+                    "Generate a modified version of the email following the same structure:\n"
+                    "recipient: <email>\nsubject: <subject>\nbody: <body>\n\n"
+                    "End with 'Maaz Asghar'"
+                )
+                
+                modified_response = await client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": modification_prompt}],
+                    max_tokens=200
+                )
+                
+                last_email_draft = modified_response.choices[0].message.content.strip()
+                return f"{last_email_draft}\n\nWould you like to send this email?"
+            else:  # cancel
+                response = "Email draft cancelled."
+                last_email_draft = None  # Clear the draft
+                return response
 
         relevant_emails = query_vector_db(query)
         if relevant_emails:
@@ -159,7 +235,7 @@ async def ai_query_with_email_context(query):
                 )
                 ai_response = response.choices[0].message.content.strip()
                 last_email_draft = ai_response  # Store the draft
-                return f"{ai_response}\n\nWould you like to send this email? (yes/no)"
+                return f"{ai_response}\n\nWould you like to send this email?"
             else:
                 return "No suitable email found to respond to."
 
@@ -188,7 +264,7 @@ async def ai_query_with_email_context(query):
         # If the response contains email fields, store it as a draft and ask for confirmation
         if all(field in ai_response.lower() for field in ["recipient:", "subject:", "body:"]):
             last_email_draft = ai_response
-            ai_response = f"{ai_response}\n\nWould you like to send this email? (yes/no)"
+            ai_response = f"{ai_response}\n\nWould you like to send this email?"
         
         memory.save_context({"content": query}, {"content": ai_response})
         return ai_response
