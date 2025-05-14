@@ -1,10 +1,12 @@
+"""Configuration settings for facial analysis."""
 import os
+import sys
 
-# Database path
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/database.db'))
+# Add the project root to Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-# Create database directory if it doesn't exist
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+# Import shared config
+from src.config import DB_PATH
 
 # Configuration
 MIN_FACE_SIZE = 60  # Minimum size of face to consider

@@ -8,30 +8,21 @@ from ..object_detection.object_detection import detect_objects
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.runnable import RunnablePassthrough
 from .todo_file_agents import todo_agent, file_agent
-import logging
+from .logger import system_logger
 import os
 import sys
-
-# Configure logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 # Add the root directory to sys.path if not already there
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-# Import the spider_agent workflow
-try:
-    from spider_agent import app as spider_workflow
-    logger.info("Successfully imported spider_agent workflow")
-except ImportError as e:
-    logger.error(f"Failed to import spider_agent: {e}")
-    spider_workflow = None
-
 class AgentManager:
     def __init__(self, llm: ChatOpenAI):
+        system_logger.log("Initializing AgentManager")
         self.llm = llm
+        system_logger.log("Setting up agent mappings")
+        
         self.agents: dict[QueryType, Callable] = {
             QueryType.WHATSAPP: whatsapp_bot,
             QueryType.EMAIL: email_bot,
@@ -44,6 +35,13 @@ class AgentManager:
                 ("human", "{input}")
             ]) | self.llm | RunnablePassthrough()
         }
+        system_logger.log(f"Agent mappings initialized with {len(self.agents)} agents")
 
     def get_agent(self, query_type: QueryType) -> Optional[Callable]:
-        return self.agents.get(query_type)
+        system_logger.log(f"Getting agent for query type: {query_type.value}")
+        agent = self.agents.get(query_type)
+        if agent:
+            system_logger.log(f"Found agent for {query_type.value}")
+        else:
+            system_logger.log(f"No agent found for {query_type.value}", "WARNING")
+        return agent

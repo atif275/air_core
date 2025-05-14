@@ -7,10 +7,8 @@ from config import (
     DEBUG_MODE,
     DEFAULT_DISPLAY_CONFIDENCE
 )
-import logging
+from logger import face_logger
 from database import update_active_person
-
-logger = logging.getLogger(__name__)
 
 class FaceTracker:
     def __init__(self, db_cursor=None):
@@ -74,7 +72,7 @@ class FaceTracker:
                 track_info['face_img'] = face_img
                 matched_tracks.add(track_id)
                 unmatched_detections.remove(best_detection_idx)
-                logger.debug(f"Updated track {track_id} with detection {best_detection_idx}")
+                face_logger.log(f"Updated track {track_id} with detection {best_detection_idx}", "INFO")
         
         # Second pass: Create new tracks for unmatched detections
         for idx in unmatched_detections:
@@ -103,13 +101,13 @@ class FaceTracker:
                 'phase': 'recognition'
             }
             matched_tracks.add(track_id)
-            logger.debug(f"Created new track {track_id} for unmatched detection {idx}")
+            face_logger.log(f"Created new track {track_id} for unmatched detection {idx}", "INFO")
         
         # Remove old tracks
         self._remove_old_tracks(matched_tracks, current_time)
         
         # Log tracking status
-        logger.debug(f"Active tracks: {len(self.face_tracking)}, Matched this frame: {len(matched_tracks)}")
+        face_logger.log(f"Active tracks: {len(self.face_tracking)}, Matched this frame: {len(matched_tracks)}", "INFO")
         return matched_tracks
 
     def _remove_old_tracks(self, matched_tracks, current_time):
@@ -122,14 +120,14 @@ class FaceTracker:
                     tracks_to_remove.append(track_id)
                     # Don't clear active person when face leaves frame
                     if DEBUG_MODE and track_info.get('face_id') is not None:
-                        print(f"Person left frame (was ID: {track_info['face_id']})")
+                        face_logger.log(f"Person left frame (was ID: {track_info['face_id']})", "INFO")
         
         # Remove old tracks
         for track_id in tracks_to_remove:
             if DEBUG_MODE:
                 track_info = self.face_tracking[track_id]
                 track_age = current_time - track_info.get('track_start_time', current_time)
-                logger.debug(f"Removing track {track_id} (age: {track_age:.1f}s, frames: {track_info['frames_seen']})")
+                face_logger.log(f"Removing track {track_id} (age: {track_age:.1f}s, frames: {track_info['frames_seen']})", "INFO")
             del self.face_tracking[track_id]
 
     def update_track_identity(self, track_id, match_result, similarity):
@@ -159,11 +157,11 @@ class FaceTracker:
             # Update active person in database for high confidence matches
             if self.db_cursor and face_id is not None:
                 if DEBUG_MODE:
-                    print(f"High confidence match, updating active person to ID: {face_id}")
+                    face_logger.log(f"High confidence match, updating active person to ID: {face_id}", "INFO")
                 update_active_person(self.db_cursor, face_id)
             
             if DEBUG_MODE:
-                print(f"Immediate match due to high similarity: {name} ({similarity:.4f})")
+                face_logger.log(f"Immediate match due to high similarity: {name} ({similarity:.4f})", "INFO")
             return
         
         # Make identity decision after collecting enough frames
@@ -206,15 +204,15 @@ class FaceTracker:
         frames_with_match = sum(1 for m in track_info['match_history'] if m is not None)
         
         if DEBUG_MODE:
-            print("\nIdentity Evaluation Results:")
-            print(f"  Frames with any match: {frames_with_match}/{EVALUATION_FRAMES}")
+            face_logger.log("\nIdentity Evaluation Results:", "INFO")
+            face_logger.log(f"  Frames with any match: {frames_with_match}/{EVALUATION_FRAMES}", "INFO")
             if match_counts:
-                print(f"  Match counts: {match_counts}")
-            print(f"  Max similarity: {max_similarity:.4f}")
+                face_logger.log(f"  Match counts: {match_counts}", "INFO")
+            face_logger.log(f"  Max similarity: {max_similarity:.4f}", "INFO")
             if high_similarity_matches:
-                print(f"  High similarity matches: {high_similarity_matches}")
+                face_logger.log(f"  High similarity matches: {high_similarity_matches}", "INFO")
             if consistent_matches:
-                print(f"  Consistent matches above threshold: {consistent_matches}")
+                face_logger.log(f"  Consistent matches above threshold: {consistent_matches}", "INFO")
         
         # If ANY frame had high similarity, prevent registration and match to that person
         if high_similarity_matches:
@@ -227,7 +225,7 @@ class FaceTracker:
             track_info['evaluated'] = True
             track_info['can_register'] = False
             if DEBUG_MODE:
-                print(f"  Decision: Matched to {most_common_high_sim} due to high similarity frames")
+                face_logger.log(f"  Decision: Matched to {most_common_high_sim} due to high similarity frames", "INFO")
             return
         
         # If ANY frame consistently matched above recognition threshold, prevent registration
@@ -241,7 +239,7 @@ class FaceTracker:
             track_info['evaluated'] = True
             track_info['can_register'] = False
             if DEBUG_MODE:
-                print(f"  Decision: Matched to {most_common_consistent} due to consistent matches above threshold")
+                face_logger.log(f"  Decision: Matched to {most_common_consistent} due to consistent matches above threshold", "INFO")
             return
         
         # Find the most frequent match (mode) for normal evaluation
@@ -278,7 +276,7 @@ class FaceTracker:
             update_active_person(self.db_cursor, face_id)
         
         if DEBUG_MODE:
-            print(f"  Decision: {name} (mode with {len(matched_similarities)}/{EVALUATION_FRAMES} frames)")
+            face_logger.log(f"  Decision: {name} (mode with {len(matched_similarities)}/{EVALUATION_FRAMES} frames)", "INFO")
 
     def _handle_inconsistent_match(self, track_info, frames_with_match):
         """Handle cases where there isn't a consistent match"""
@@ -292,7 +290,7 @@ class FaceTracker:
             track_info['can_register'] = True
             
             if DEBUG_MODE:
-                print(f"  Decision: Unknown (no matches in any frame) - can register as new")
+                face_logger.log(f"  Decision: Unknown (no matches in any frame) - can register as new", "INFO")
         else:
             # Some matches but not consistent - mark as ambiguous
             track_info['name'] = "Ambiguous"
@@ -303,7 +301,7 @@ class FaceTracker:
             track_info['can_register'] = False
             
             if DEBUG_MODE:
-                print(f"  Decision: Ambiguous ({frames_with_match}/{EVALUATION_FRAMES} frames had matches) - cannot register")
+                face_logger.log(f"  Decision: Ambiguous ({frames_with_match}/{EVALUATION_FRAMES} frames had matches) - cannot register", "INFO")
 
     def add_embedding(self, track_id, features, quality_score):
         """Add embedding to collection based on current phase"""
@@ -391,7 +389,7 @@ class FaceTracker:
             track_info['recognition_embeddings'] = []  # Clear existing embeddings
             track_info['embedding_qualities'] = []
             if DEBUG_MODE:
-                print(f"Starting post-registration embedding collection for {track_info['name']}")
+                face_logger.log(f"Starting post-registration embedding collection for {track_info['name']}", "INFO")
 
     def needs_more_embeddings(self, track_id):
         """Check if we need to collect more embeddings for this track"""
@@ -408,7 +406,7 @@ class FaceTracker:
             if track_info['post_registration_embeddings'] >= 5:
                 track_info['needs_more_embeddings'] = False
             if DEBUG_MODE:
-                print(f"Post-registration embeddings for {track_info['name']}: {track_info['post_registration_embeddings']}/5")
+                face_logger.log(f"Post-registration embeddings for {track_info['name']}: {track_info['post_registration_embeddings']}/5", "INFO")
             return track_info['post_registration_embeddings']
         return 0
 
@@ -426,7 +424,7 @@ class FaceTracker:
                 # Check if this face already exists in the database
                 existing_face = self._check_existing_face(avg_embedding)
                 if existing_face:
-                    print(f"Face already exists in database as {existing_face}")
+                    face_logger.log(f"Face already exists in database as {existing_face}", "INFO")
                     self.registration_complete = True
                     self.registration_frame_count = 0
                     self.registration_embeddings = []
@@ -440,7 +438,7 @@ class FaceTracker:
                     quality_score=1.0  # Assuming good quality during registration
                 )
                 
-                print(f"Face registered as Person_{self.face_count} with ID {person_id}")
+                face_logger.log(f"Face registered as Person_{self.face_count} with ID {person_id}", "INFO")
                 self.face_count += 1
                 self.registration_complete = True
                 self.registration_frame_count = 0
@@ -449,11 +447,11 @@ class FaceTracker:
                 # Start post-registration embedding collection
                 self.post_registration_embeddings = []
                 self.post_registration_count = 0
-                print(f"Starting post-registration embedding collection for Person_{self.face_count-1}")
+                face_logger.log(f"Starting post-registration embedding collection for Person_{self.face_count-1}", "INFO")
                 
                 # Update active person
                 self.db.update_active_person(person_id)
-                print(f"Updating active person to ID: {person_id}")
+                face_logger.log(f"Updating active person to ID: {person_id}", "INFO")
                 
         elif self.post_registration_count < self.post_registration_frames:
             # Collect post-registration embeddings
@@ -464,7 +462,7 @@ class FaceTracker:
                 # Calculate and save final average embedding
                 final_embedding = np.mean(self.post_registration_embeddings, axis=0)
                 self.db.save_face_embeddings(person_id, final_embedding, 1.0)
-                print(f"Post-registration embeddings saved for Person_{self.face_count-1}")
+                face_logger.log(f"Post-registration embeddings saved for Person_{self.face_count-1}", "INFO")
                 self.post_registration_embeddings = []
                 self.post_registration_count = 0
                 self.registration_complete = False 

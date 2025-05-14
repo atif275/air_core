@@ -10,6 +10,7 @@ dist/
 downloads/
 data/
 frames/
+logs/
 eggs/
 .eggs/
 lib/

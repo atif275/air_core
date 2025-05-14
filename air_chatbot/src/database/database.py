@@ -1,9 +1,8 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Float, LargeBinary
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+"""Database models and operations for the chatbot."""
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Float, LargeBinary
+from sqlalchemy.orm import relationship
 from datetime import datetime
-
-Base = declarative_base()
+from .database_manager import Base, db_manager
 
 class Person(Base):
     __tablename__ = 'persons'
@@ -23,7 +22,7 @@ class Person(Base):
     
     # Relationships
     conversations = relationship("Conversation", back_populates="person")
-    face_embeddings = relationship("FaceEmbedding", back_populates="person")  # Added
+    face_embeddings = relationship("FaceEmbedding", back_populates="person")
 
 class Active(Base):
     __tablename__ = 'active'
@@ -47,7 +46,6 @@ class Conversation(Base):
     # Relationship
     person = relationship("Person", back_populates="conversations")
 
-# Added new model
 class FaceEmbedding(Base):
     __tablename__ = 'face_embeddings'
     
@@ -60,9 +58,6 @@ class FaceEmbedding(Base):
     # Relationship
     person = relationship("Person", back_populates="face_embeddings")
 
-# Database connection
 def get_database():
-    engine = create_engine('sqlite:///data/database.db')
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    return Session() 
+    """Get a database session using the unified database manager."""
+    return db_manager.Session()  # Return the session directly instead of the context manager 

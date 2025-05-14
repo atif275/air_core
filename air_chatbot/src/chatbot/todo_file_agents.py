@@ -2,10 +2,31 @@ from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from src.task_management.todo_operations import *
 from src.file_system.file_operations import *
-from .memory_manager import MemoryManager
-from langchain.tools import tool
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
+
+# Global context store that persists across function calls
+class GlobalContext:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(GlobalContext, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        if self._initialized:
+            return
+            
+        self.last_file_interaction: Optional[Tuple[str, str]] = None  # (user_input, bot_response)
+        self.last_todo_interaction: Optional[Tuple[str, str]] = None  # (user_input, bot_response)
+        self.last_accessed_files: list[str] = []
+        self.last_todo_operations: list[str] = []
+        self._initialized = True
+
+# Create a single instance that will be shared
+global_context = GlobalContext()
 
 model = ChatOpenAI(
     model="gpt-3.5-turbo",
@@ -14,86 +35,54 @@ model = ChatOpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
 
-# Initialize memory manager with the same model
-memory_manager = MemoryManager(llm=model)
-
-class ContextManager:
-    def __init__(self):
-        self.memory_manager = memory_manager
-        self.current_person_id = None
-    
-    def set_current_person(self, person_id: int):
-        self.current_person_id = person_id
-    
-    def get_memory(self) -> Dict[str, Any]:
-        if not self.current_person_id:
-            return {}
-        return self.memory_manager.get_memory(self.current_person_id)
-    
-    def update_memory(self, key: str, value: Any):
-        if not self.current_person_id:
-            return
-        self.memory_manager.update_memory(self.current_person_id, key, value)
-
-# Initialize context manager
-context = ContextManager()
-
 @tool
 def get_context() -> str:
     """Get the current context including recent operations and memory."""
-    memory = context.get_memory()
-    if not memory:
-        return "No context available."
-    
     context_str = "Current Context:\n"
-    if "recent_operations" in memory:
-        context_str += "\nRecent Operations:\n"
-        for op in memory["recent_operations"]:
-            context_str += f"- {op}\n"
     
-    if "last_accessed_files" in memory:
+    if global_context.last_accessed_files:
         context_str += "\nLast Accessed Files:\n"
-        for file in memory["last_accessed_files"]:
+        for file in global_context.last_accessed_files:
             context_str += f"- {file}\n"
     
-    if "last_todo_operations" in memory:
+    if global_context.last_todo_operations:
         context_str += "\nLast Todo Operations:\n"
-        for op in memory["last_todo_operations"]:
+        for op in global_context.last_todo_operations:
             context_str += f"- {op}\n"
+    
+    # Add last interactions if available
+    if global_context.last_file_interaction:
+        context_str += "\nLast File Interaction:\n"
+        context_str += f"User: {global_context.last_file_interaction[0]}\n"
+        context_str += f"Bot: {global_context.last_file_interaction[1]}\n"
+    
+    if global_context.last_todo_interaction:
+        context_str += "\nLast Todo Interaction:\n"
+        context_str += f"User: {global_context.last_todo_interaction[0]}\n"
+        context_str += f"Bot: {global_context.last_todo_interaction[1]}\n"
     
     return context_str
 
 @tool
 def update_context(operation: str, category: str = "general") -> str:
     """Update the context with a new operation."""
-    memory = context.get_memory()
-    
     if category == "file":
-        if "last_accessed_files" not in memory:
-            memory["last_accessed_files"] = []
-        memory["last_accessed_files"].append(operation)
-        if len(memory["last_accessed_files"]) > 5:
-            memory["last_accessed_files"].pop(0)
+        global_context.last_accessed_files.append(operation)
+        if len(global_context.last_accessed_files) > 5:
+            global_context.last_accessed_files.pop(0)
     elif category == "todo":
-        if "last_todo_operations" not in memory:
-            memory["last_todo_operations"] = []
-        memory["last_todo_operations"].append(operation)
-        if len(memory["last_todo_operations"]) > 5:
-            memory["last_todo_operations"].pop(0)
-    
-    if "recent_operations" not in memory:
-        memory["recent_operations"] = []
-    memory["recent_operations"].append(operation)
-    if len(memory["recent_operations"]) > 10:
-        memory["recent_operations"].pop(0)
-    
-    context.update_memory("recent_operations", memory["recent_operations"])
-    if category == "file":
-        context.update_memory("last_accessed_files", memory["last_accessed_files"])
-    elif category == "todo":
-        context.update_memory("last_todo_operations", memory["last_todo_operations"])
+        global_context.last_todo_operations.append(operation)
+        if len(global_context.last_todo_operations) > 5:
+            global_context.last_todo_operations.pop(0)
     
     return "Context updated successfully."
+
+def store_interaction(agent_type: str, user_input: str, bot_response: str):
+    """Store the interaction in context."""
+    if agent_type == "file":
+        global_context.last_file_interaction = (user_input, bot_response)
+    elif agent_type == "todo":
+        global_context.last_todo_interaction = (user_input, bot_response)
 
 # Agents
 todo_agent = create_react_agent(
@@ -113,6 +102,8 @@ todo_agent = create_react_agent(
     - Use update_context() to record important operations
     - Maintain awareness of user's task patterns and preferences
     - Reference past operations when relevant to current requests
+    - Check the last todo interaction in context to understand previous requests
+    - IMPORTANT: After each response, call store_interaction("todo", user_input, your_response)
 
     **Tool Usage Guide**
     Strictly follow these tool selection rules:
@@ -158,6 +149,7 @@ todo_agent = create_react_agent(
     - Verify schedule conflicts before confirming additions
     - Always validate dates using get_current_datetime before scheduling
     - Reference past operations when relevant ("Based on your previous tasks...")
+    - After each interaction, store the interaction in context using store_interaction("todo", user_input, your_response)
     """
 )
 
@@ -189,6 +181,8 @@ file_agent = create_react_agent(
     - Maintain awareness of frequently accessed files and directories
     - Remember user's preferred working directories
     - Track the last 5 file operations in context
+    - Check the last file interaction in context to understand previous requests
+    - IMPORTANT: After each response, call store_interaction("file", user_input, your_response)
 
     **CRITICAL RULE: ALWAYS USE TOOLS**
     - NEVER claim to perform file operations without calling the appropriate tool
@@ -198,6 +192,7 @@ file_agent = create_react_agent(
     - ALWAYS call update_file() to modify file content
     - ALWAYS call the appropriate tool for EVERY file operation
     - NEVER pretend an operation succeeded without using the proper tool
+    - After each interaction, store the interaction in context using store_interaction("file", user_input, your_response)
 
     **Tool Usage Protocol**
     1. create_file:
@@ -206,6 +201,7 @@ file_agent = create_react_agent(
     - Validate filename extensions
     - Auto-generate backup for existing files
     - ALWAYS call update_context() with category="file" after creation
+    - ALWAYS call store_interaction("file", user_input, your_response) after responding
 
     2. read_file:
     - ALWAYS call get_context() first
@@ -213,6 +209,7 @@ file_agent = create_react_agent(
     - Detect binary files and offer hex dump
     - Handle encoding conflicts (fallback to utf-8)
     - ALWAYS call update_context() with category="file" after reading
+    - ALWAYS call store_interaction("file", user_input, your_response) after responding
 
     3. update_file:
     - ALWAYS call get_context() first
@@ -220,6 +217,7 @@ file_agent = create_react_agent(
     - Use tempfile for atomic writes
     - Verify disk space availability
     - ALWAYS call update_context() with category="file" after updating
+    - ALWAYS call store_interaction("file", user_input, your_response) after responding
 
     4. delete_file:
     - ALWAYS call get_context() first
@@ -229,6 +227,7 @@ file_agent = create_react_agent(
     - Confirm with user for system files (*.sys, *.dll)
     - Only report success if the function returns a success message
     - ALWAYS call update_context() with category="file" after deletion
+    - ALWAYS call store_interaction("file", user_input, your_response) after responding
 
     5. list_current_files:
     - ALWAYS call get_context() first
@@ -236,6 +235,7 @@ file_agent = create_react_agent(
     - Highlight hidden files
     - Add size warnings for large files
     - ALWAYS call update_context() with category="file" after listing
+    - ALWAYS call store_interaction("file", user_input, your_response) after responding
 
     6. change_directory:
     - ALWAYS call get_context() first
@@ -243,6 +243,7 @@ file_agent = create_react_agent(
     - Maintain history stack (max 10 entries)
     - Handle relative paths with care
     - ALWAYS call update_context() with category="file" after changing directory
+    - ALWAYS call store_interaction("file", user_input, your_response) after responding
 
     7. find_files:
     - ALWAYS call get_context() first
@@ -257,6 +258,7 @@ file_agent = create_react_agent(
     - Prioritize user directories before system directories
     - ALWAYS return the complete path to any found files
     - ALWAYS call update_context() with category="file" after finding files
+    - ALWAYS call store_interaction("file", user_input, your_response) after responding
 
     **Operation Priorities**
     1. Safety: Prevent data loss at all costs
@@ -290,6 +292,7 @@ file_agent = create_react_agent(
     - Suggest cleanup after multiple operations
     - Reference past operations when relevant ("Based on your previous file operations...")
     - When user refers to "the file" or "it", clarify which file you're referring to
+    - After each interaction, store the interaction in context using store_interaction("file", user_input, your_response)
 
     **Example Workflow**
     User: "Create a file called info.txt"
@@ -297,15 +300,17 @@ file_agent = create_react_agent(
     1. Call get_context() to check recent operations
     2. Call create_file("info.txt", "")
     3. Call update_context("Created file: info.txt", category="file")
-    4. Return "File 'info.txt' created successfully"
+    4. Call store_interaction("file", "Create a file called info.txt", "File 'info.txt' created successfully")
+    5. Return "File 'info.txt' created successfully"
 
     User: "Now delete it"
     Agent:
     1. Call get_context() to find recently created file
-    2. See "info.txt" in last_accessed_files
+    2. See "info.txt" in last_accessed_files and last file interaction
     3. Call delete_file("info.txt")
     4. Call update_context("Deleted file: info.txt", category="file")
-    5. Return "File 'info.txt' deleted successfully"
+    5. Call store_interaction("file", "Now delete it", "File 'info.txt' deleted successfully")
+    6. Return "File 'info.txt' deleted successfully"
 
     **Find Files Workflow**
     User: "Find all Python files in the project"
@@ -316,8 +321,9 @@ file_agent = create_react_agent(
     4. For general searches, use search_all=True
     5. Execute find_files("*.py", recursive=True, search_all=True)
     6. Call update_context("Found Python files", category="file")
-    7. Return the EXACT result from the find_files function
-    8. NEVER claim to find files without calling the function
+    7. Call store_interaction("file", "Find all Python files in the project", result)
+    8. Return the EXACT result from the find_files function
+    9. NEVER claim to find files without calling the function
 
     **Critical Find File Examples**
     1. "Find file test.txt" → MUST call find_files("test.txt", search_all=True) 
@@ -331,7 +337,8 @@ file_agent = create_react_agent(
     1. Call get_context() to check recent operations
     2. MUST call delete_file("/path/to/file.txt")
     3. Call update_context("Deleted file: /path/to/file.txt", category="file")
-    4. Report success or failure based on the result of the function call
-    5. NEVER claim to delete a file without calling delete_file()
+    4. Call store_interaction("file", "Delete the file at /path/to/file.txt", result)
+    5. Report success or failure based on the result of the function call
+    6. NEVER claim to delete a file without calling delete_file()
     """
 )

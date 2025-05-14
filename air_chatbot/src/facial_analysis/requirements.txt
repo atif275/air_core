@@ -4,3 +4,5 @@ insightface>=0.7.0
 scikit-image>=0.19.0
 scipy>=1.6.0 
 onnxruntime
+dotenv
+SQLAlchemy>=2.0.27

@@ -7,6 +7,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain.output_parsers import EnumOutputParser
 from collections import deque
+from .logger import system_logger
 
 class QueryType(str, Enum):
     WHATSAPP = "whatsapp"
@@ -42,6 +43,7 @@ class InteractionHistory:
 
 class RouterChain:
     def __init__(self, llm: ChatOpenAI):
+        system_logger.log("Initializing RouterChain")
         self.llm = llm
         self.history = InteractionHistory(max_size=1)  # Track last 1 interaction[s]
         
@@ -221,9 +223,14 @@ class RouterChain:
                     - "I will share with you a number in next prompt and i want you to spell it"
 
                 IMPORTANT: Your response must be ONLY the type word (one of: whatsapp, todo, file, vision, attributes, email, general) and NOTHING else. Do not include explanations, markdown, or any other text. Your response must be exactly one of these words, in lowercase, with no punctuation or formatting.
-                """),
-                ("human", """Previous Interactions: {history}
-                Current query: {input}""")
+                
+                Previous Interactions Context:
+                {history}
+                
+                Current query: {input}
+                
+                IMPORTANT: Consider the previous interactions when determining the type. If the current query is a continuation of a previous interaction (like spelling a number that was promised in the previous message), use the same type as the previous interaction.
+                """), ("human", "{input}")
         ])
         
         self.router_chain = (
@@ -235,14 +242,16 @@ class RouterChain:
             | self.llm
             | RunnablePassthrough()
         )
+        system_logger.log("RouterChain initialization complete")
     
     def route_query(self, query: str, response: str = "") -> QueryType:
         """Route a query, maintaining context for consecutive interactions."""
+        system_logger.log(f"Routing query: {query}")
         query = query.lower().strip()
         
         # Get intent-based routing
         result = self.router_chain.invoke(query)
-        print(result.content)
+        system_logger.log(f"Router chain result: {result.content}")
         
         # Extract content from AIMessage if needed
         if hasattr(result, 'content'):
@@ -264,9 +273,11 @@ class RouterChain:
         
         # If no valid type found, default to general
         if not query_type:
+            system_logger.log(f"No valid query type found, defaulting to GENERAL", "WARNING")
             query_type = QueryType.GENERAL
         
         # Update history with the current interaction
         self.history.add(query, response, query_type)
+        system_logger.log(f"Query routed to type: {query_type.value}")
         
         return query_type

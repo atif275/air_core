@@ -13,12 +13,8 @@ from .memory_manager import MemoryManager
 from .personality_manager import PersonalityManager
 from .session_manager import SessionManager
 from .conversation_manager import ConversationManager
-import logging
 from datetime import datetime
-
-# Configure logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+from .logger import system_logger
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +33,8 @@ class PersonalizedChatbot:
         if self._initialized:
             return
             
+        system_logger.log("Initializing PersonalizedChatbot")
+        
         self.llm = ChatOpenAI(
             model_name="gpt-3.5-turbo",
             temperature=0.9,
@@ -55,18 +53,22 @@ class PersonalizedChatbot:
         self.session_manager.set_memory_manager(self.memory_manager)  # Set memory manager in session manager
         self.memory_manager.set_session_manager(self.session_manager)  # Set session manager in memory manager
         
+        system_logger.log("PersonalizedChatbot initialization complete")
         self._initialized = True
 
     def _validate_input(self, user_input: str) -> bool:
         """Validate user input before processing"""
         if not user_input or not isinstance(user_input, str):
+            system_logger.log(f"Invalid input validation: {user_input}", "WARNING")
             return False
         if len(user_input) > 1000:  # Max length check
+            system_logger.log(f"Input too long: {len(user_input)} characters", "WARNING")
             return False
-        # Add more validation rules
         return True
 
     def get_response(self, user_input: str) -> str:
+        system_logger.log(f"Processing user input: {user_input}")
+        
         if not self._validate_input(user_input):
             return "Invalid input. Please try again."
         try:
@@ -74,17 +76,21 @@ class PersonalizedChatbot:
             current_person = self.session_manager.get_current_person()
             
             if not current_person:
+                system_logger.log("No active person found in database", "ERROR")
                 return "Error: No active person found in the database."
+                
+            system_logger.log(f"Current person: {current_person.id}")
                 
             # Use the router to determine query type
             try:
                 query_type = self.router.route_query(user_input)
+                system_logger.log(f"Query type determined: {query_type}")
                 
                 # Handle attribute updates if needed
                 attributes = {}
-                attributes_updated = False
                 if query_type == QueryType.ATTRIBUTES:
                     try:
+                        system_logger.log("Processing attribute update")
                         # Use the imported identify_attributes function
                         attributes = identify_attributes.invoke({
                             "input": {"user_input": user_input}
@@ -96,19 +102,21 @@ class PersonalizedChatbot:
                                 "attributes": attributes
                             }
                         })
+                        system_logger.log(f"Attributes updated: {attributes}")
                     except Exception as e:
-                        logger.error(f"Error processing attributes: {str(e)}")
+                        system_logger.log(f"Error updating attributes: {str(e)}", "ERROR")
                         attributes = {}
-                        attributes_updated = False
                 
                 # Get conversation history
                 conversation_history = self.conversation_manager.format_conversation_history(current_person.id)
+                system_logger.log("Retrieved conversation history")
                 
                 # Create personality-based prompt
                 personality_prompt = self.personality_manager.create_personality_prompt(
                     current_person, 
                     conversation_history
                 )
+                system_logger.log("Created personality prompt")
                 
                 # Prepare input data with context
                 input_data = {
@@ -122,14 +130,15 @@ class PersonalizedChatbot:
                     
                 agent = self.agent_manager.get_agent(query_type)
                 if not agent:
-                    logger.error(f"No agent found for query type: {query_type}")
+                    system_logger.log(f"No agent found for query type: {query_type}", "ERROR")
                     return f"No agent found for query type: {query_type}"
 
-                logger.info(f"Invoking {query_type} agent")
+                system_logger.log(f"Using agent for query type: {query_type}")
 
                 # For LangGraph output (TODO, FILE)
                 if query_type in [QueryType.TODO, QueryType.FILE]:
                     thread_id = f"user-{current_person.id}"
+                    system_logger.log(f"Processing LangGraph request with thread_id: {thread_id}")
                     result = agent.invoke(
                         {"messages": [{"role": "user", "content": input_data["input"]}]},
                         {"configurable": {"thread_id": thread_id}}
@@ -141,34 +150,41 @@ class PersonalizedChatbot:
                         response = messages[-1].content
                     else:
                         response = "No valid response generated."
+                        system_logger.log("No valid response generated from LangGraph", "WARNING")
 
                 # Email agent: extract input string
                 elif query_type == QueryType.EMAIL or query_type == QueryType.WHATSAPP or query_type == QueryType.VISION:
+                    system_logger.log(f"Processing {query_type} request")
                     response = agent(input_data["input"])
 
                 # LangChain agent: use .invoke()
                 elif hasattr(agent, "invoke"):
+                    system_logger.log("Processing LangChain agent request")
                     response = agent.invoke(input_data)
 
                 # Function-style agent
                 else:
+                    system_logger.log("Processing function-style agent request")
                     response = agent(input_data)
 
                 # Extract content if it's a LangChain message object
                 if hasattr(response, "content"):
                     response = response.content
 
+                # Update memory with the interaction
+                self.memory_manager.update_memory(current_person.id, user_input, response)
+
+                system_logger.log("Response generated successfully")
                 return response
 
                 
             except Exception as e:
-                logger.error(f"Error in query processing: {str(e)}")
+                system_logger.log(f"Error processing request: {str(e)}", "ERROR")
                 return "I had trouble processing your request. Please try again."
                 
         except Exception as e:
-            logger.error(f"Error in get_response: {str(e)}")
             import traceback
-            logger.error(f"Full traceback: {traceback.format_exc()}")
+            system_logger.log(f"Critical error: {str(e)}\n{traceback.format_exc()}", "CRITICAL")
             return "I apologize, but I'm having trouble at the moment. Please try again."
 
 # Create a singleton instance
