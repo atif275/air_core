@@ -65,6 +65,17 @@ contacts_file = "contacts.txt"
 saved_messages = {}
 last_modified_time = None  # Track modification time for send file
 
+# Function to ensure send_whatsapp.txt exists
+def ensure_send_file():
+    try:
+        if not os.path.exists(send_file):
+            print(f"Creating {send_file}...")
+            with open(send_file, "w", encoding="utf-8") as file:
+                pass  # Create empty file
+            print(f"{send_file} created successfully.")
+    except Exception as e:
+        print(f"Error creating {send_file}: {e}")
+
 # Function to ensure contacts.txt exists
 def ensure_contacts_file():
     try:
@@ -80,8 +91,9 @@ def ensure_contacts_file():
     except Exception as e:
         print(f"Error creating {contacts_file}: {e}")
 
-# Initialize contacts file
+# Initialize files
 ensure_contacts_file()
+ensure_send_file()
 
 def fetch_contacts_from_chat_list(count=None):
     """
@@ -218,6 +230,9 @@ def send_agent():
 
     while True:
         try:
+            # Ensure send file exists
+            # ensure_send_file()
+            
             current_modified_time = os.path.getmtime(send_file)
             if (last_modified_time is None or current_modified_time > last_modified_time) and os.path.getsize(send_file) > 0:
                 print("New messages detected in send_whatsapp.txt")
@@ -235,7 +250,8 @@ def send_agent():
             time.sleep(5)
 
         except FileNotFoundError:
-            print("send_whatsapp.txt not found. Waiting for file...")
+            print("send_whatsapp.txt not found. Creating file...")
+            # ensure_send_file()
             time.sleep(5)
         except Exception as e:
             print(f"Unexpected error in send agent: {e}")
@@ -280,11 +296,68 @@ def recv_agent():
                     
                     # Check for voice message
                     voice_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='mic']")
+                    # Check for photo message
+                    photo_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='image-refreshed']")
+                    # Check for video message
+                    video_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='video-call-refreshed']")
+                    # Check for sticker message
+                    sticker_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='sticker-refreshed-thin']")
+                    # Check for missed voice call
+                    missed_call = chat_container.find_elements(By.XPATH, ".//span[@data-icon='voice-call-incoming-filled']")
+                    # Check for missed video call
+                    missed_video_call = chat_container.find_elements(By.XPATH, ".//span[@data-icon='video-call-incoming-filled']")
+                    # Check for GIF message
+                    gif_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='gif-refreshed']")
+                    # Check for document message
+                    document_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='document-refreshed-thin']")
+                    # Check for location message
+                    location_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='location-refreshed-outline']")
+                    # Check for poll message
+                    poll_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='poll-refreshed-thin']")
+                    # Check for contact sharing message
+                    contact_sharing = chat_container.find_elements(By.XPATH, ".//span[@data-icon='person-refreshed-outline-thin']")
+                    # Check for event invitation message
+                    event_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='ic-chatlist-event']")
+                    
                     if voice_message:
                         # Get voice message duration
                         duration_element = chat_container.find_elements(By.XPATH, ".//span[@class='x78zum5 x1cy8zhl']//span[@dir='auto']")
                         duration = duration_element[0].text if duration_element else "Unknown"
                         message_text = f"Voice Message {duration}"
+                    elif photo_message:
+                        message_text = "Photo"
+                    elif video_message:
+                        message_text = "Video"
+                    elif sticker_message:
+                        message_text = "Sticker"
+                    elif missed_call:
+                        message_text = "Missed voice call"
+                    elif missed_video_call:
+                        message_text = "Missed video call"
+                    elif gif_message:
+                        message_text = "GIF"
+                    elif document_message:
+                        # Get document details
+                        doc_text_element = chat_container.find_elements(By.XPATH, ".//span[@dir='ltr']")
+                        doc_text = doc_text_element[0].text if doc_text_element else "Unknown document"
+                        message_text = f'File "{doc_text}"'
+                    elif location_message:
+                        message_text = "Location"
+                    elif poll_message:
+                        # Get poll question
+                        poll_text_element = chat_container.find_elements(By.XPATH, ".//span[@dir='ltr']")
+                        poll_text = poll_text_element[0].text if poll_text_element else "Unknown poll"
+                        message_text = f'Poll "{poll_text}"'
+                    elif contact_sharing:
+                        # Get contact name from the message content
+                        contact_text_element = chat_container.find_elements(By.XPATH, ".//div[@class='_ak8k']//span[@dir='auto']")
+                        contact_text = contact_text_element[0].text if contact_text_element else "Unknown contact"
+                        message_text = f'Contact Sharing "{contact_text}"'
+                    elif event_message:
+                        # Get event details
+                        event_text_element = chat_container.find_elements(By.XPATH, ".//div[@class='_ak8k']//span[@dir='ltr']")
+                        event_text = event_text_element[0].text if event_text_element else "Unknown event"
+                        message_text = f'Event "{event_text}"'
                     else:
                         # Regular text message
                         message_text_element = chat_container.find_elements(By.XPATH, ".//div[@class='_ak8k']//span[@dir='ltr']")
