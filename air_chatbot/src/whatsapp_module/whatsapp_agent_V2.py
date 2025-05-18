@@ -61,8 +61,87 @@ except Exception as e:
 # Files to manage messages
 send_file = "send_whatsapp.txt"
 recv_file = "whatsapp_recv.txt"
+contacts_file = "contacts.txt"
 saved_messages = {}
 last_modified_time = None  # Track modification time for send file
+
+# Function to ensure contacts.txt exists
+def ensure_contacts_file():
+    try:
+        if not os.path.exists(contacts_file):
+            print(f"Creating {contacts_file}...")
+            with open(contacts_file, "w", encoding="utf-8") as file:
+                # file.write("# WhatsApp Contacts List\n")
+                # file.write("# Format: Contact Name/Phone Number\n")
+                # file.write("# Add contacts below this line\n")
+                # file.write("---------\n")
+                pass  # Create empty file
+            print(f"{contacts_file} created successfully.")
+    except Exception as e:
+        print(f"Error creating {contacts_file}: {e}")
+
+# Initialize contacts file
+ensure_contacts_file()
+
+def fetch_contacts_from_chat_list(count=None):
+    """
+    Fetch contacts from WhatsApp Web chat list and save them to contacts.txt.
+    
+    Args:
+        count (int, optional): Number of recent contacts to fetch. If None, fetches all contacts.
+    
+    Returns:
+        list: List of fetched contacts
+    """
+    try:
+        print("Fetching contacts from chat list...")
+        # Wait for chat list to be visible
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//div[@aria-label='Chat list']"))
+        )
+        
+        # Get all chat containers
+        chat_containers = driver.find_elements(
+            By.XPATH, 
+            "//div[@aria-label='Chat list']//div[contains(@class, '_ak72') and contains(@class, '_ak73')]"
+        )
+        
+        contacts = []
+        for container in chat_containers:
+            try:
+                # Extract contact name/number
+                contact_element = container.find_element(By.XPATH, ".//span[@title]")
+                contact_name = contact_element.get_attribute("title")
+                
+                if contact_name:
+                    contacts.append(contact_name)
+            except Exception as e:
+                print(f"Error extracting contact: {e}")
+                continue
+        
+        # If count is specified, take only the most recent contacts
+        if count is not None and isinstance(count, int):
+            contacts = contacts[:count]
+        
+        # Save contacts to file
+        try:
+            with open(contacts_file, "w", encoding="utf-8") as file:
+                # file.write("# WhatsApp Contacts List\n")
+                # file.write("# Format: Contact Name/Phone Number\n")
+                # file.write("# Most recent contacts at the top\n")
+                file.write("---------\n")
+                for contact in contacts:
+                    file.write(f"{contact}\n")
+                    file.write("---------\n")
+            print(f"Successfully saved {len(contacts)} contacts to {contacts_file}")
+        except Exception as e:
+            print(f"Error saving contacts to file: {e}")
+        
+        return contacts
+    
+    except Exception as e:
+        print(f"Error fetching contacts: {e}")
+        return []
 
 # Function to load messages to send from the file
 def load_messages_to_send():
@@ -198,8 +277,18 @@ def recv_agent():
                     contact_name = chat_container.find_element(By.XPATH, ".//span[@title]").get_attribute("title")
                     received_time_element = chat_container.find_elements(By.XPATH, ".//div[@class='_ak8i']")
                     received_time = received_time_element[0].text if received_time_element else "Unknown"
-                    message_text_element = chat_container.find_elements(By.XPATH, ".//div[@class='_ak8k']//span[@dir='ltr']")
-                    message_text = message_text_element[0].text if message_text_element else "No message text"
+                    
+                    # Check for voice message
+                    voice_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='mic']")
+                    if voice_message:
+                        # Get voice message duration
+                        duration_element = chat_container.find_elements(By.XPATH, ".//span[@class='x78zum5 x1cy8zhl']//span[@dir='auto']")
+                        duration = duration_element[0].text if duration_element else "Unknown"
+                        message_text = f"Voice Message {duration}"
+                    else:
+                        # Regular text message
+                        message_text_element = chat_container.find_elements(By.XPATH, ".//div[@class='_ak8k']//span[@dir='ltr']")
+                        message_text = message_text_element[0].text if message_text_element else "No message text"
 
                     if unread_indicator:
                         unread_count = unread_indicator[0].get_attribute("aria-label").replace(" unread message", "").replace(" unread messages", "")
@@ -213,7 +302,6 @@ def recv_agent():
                     print("Error extracting details from chat container:", e)
 
             # Remove read messages no longer in the chat list
-
             for contact in list(saved_messages.keys()):
                 if contact not in current_unread_contacts:
                     print(f"Removing read message from {contact}")
@@ -232,6 +320,21 @@ def shutdown(signal, frame):
     driver.quit()
     sys.exit(0)
 
+# Function to periodically update contacts
+def contact_update_agent():
+    """
+    Periodically updates the contacts list from WhatsApp Web.
+    Runs every 5 minutes to keep contacts.txt up to date.
+    """
+    print("Starting contact update agent...")
+    while True:
+        try:
+            fetch_contacts_from_chat_list()
+            time.sleep(300)  # Update every 5 minutes
+        except Exception as e:
+            print(f"Error in contact update agent: {e}")
+            time.sleep(60)  # Wait 1 minute before retrying if there's an error
+
 # Register the shutdown function for SIGINT (Ctrl+C)
 signal.signal(signal.SIGINT, shutdown)
 
@@ -240,6 +343,11 @@ if __name__ == "__main__":
     driver.get("https://web.whatsapp.com")
     time.sleep(8)  # Wait for WhatsApp Web to load
 
+    # Initial contact fetch
+    print("Performing initial contact fetch...")
+    fetch_contacts_from_chat_list()
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
         executor.submit(send_agent)
         executor.submit(recv_agent)
+        executor.submit(contact_update_agent)  # Add contact update agent
