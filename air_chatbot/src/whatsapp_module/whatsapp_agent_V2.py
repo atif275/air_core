@@ -13,6 +13,9 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 import concurrent.futures
 import signal
 import sys
+from utils.forward_messages import forward_recent_message_to
+from utils.download_voice_messages import download_voice_message
+from utils.download_audio_messages import download_audio_message
 
 # Load environment variables
 load_dotenv()
@@ -276,6 +279,7 @@ def save_received_message(contact_name, received_time, message_text, unread_coun
             file.write(f"Message: {details['message_text']}\n")
             file.write("---------\n")
 
+
 # Function to check for new messages without opening the chat
 def recv_agent():
     print("Entering check_new_messages()")
@@ -296,6 +300,8 @@ def recv_agent():
                     
                     # Check for voice message
                     voice_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='mic']")
+                    # Check for audio message
+                    audio_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='audio-refreshed-thin']")
                     # Check for photo message
                     photo_message = chat_container.find_elements(By.XPATH, ".//span[@data-icon='image-refreshed']")
                     # Check for video message
@@ -324,6 +330,16 @@ def recv_agent():
                         duration_element = chat_container.find_elements(By.XPATH, ".//span[@class='x78zum5 x1cy8zhl']//span[@dir='auto']")
                         duration = duration_element[0].text if duration_element else "Unknown"
                         message_text = f"Voice Message {duration}"
+                        
+                        # if unread_indicator:
+                        #     print(f"Unread voice message detected from {contact_name}")
+                        #     download_voice_message(driver, contact_name)
+                    elif audio_message:
+                        message_text = "Audio"
+                        # if unread_indicator:
+                        #     print(f"Unread audio message detected from {contact_name}")
+                        #     download_audio_message(driver, contact_name)
+                        
                     elif photo_message:
                         message_text = "Photo"
                     elif video_message:
@@ -370,6 +386,11 @@ def recv_agent():
 
                         save_received_message(contact_name, received_time, message_text, unread_count)
                         current_unread_contacts.add(contact_name)
+                        
+                        # # Forward the message if it's not an event
+                        if not event_message:
+                            print(f"Attempting to forward message from {contact_name}")
+                            forward_recent_message_to(driver, contact_name, "xyz")  # Replace "Test Contact" with actual recipient
                 
                 except Exception as e:
                     print("Error extracting details from chat container:", e)
@@ -410,6 +431,7 @@ def contact_update_agent():
 
 # Register the shutdown function for SIGINT (Ctrl+C)
 signal.signal(signal.SIGINT, shutdown)
+
 
 # Main execution with concurrent send and receive agents
 if __name__ == "__main__":
