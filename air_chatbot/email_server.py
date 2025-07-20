@@ -15,6 +15,19 @@ CORS(app)  # Enable CORS for all routes
 # Store credentials in memory (in production, use a secure database)
 credentials_store = {}
 
+@app.route('/')
+def root():
+    """Root endpoint that indicates the email server is running"""
+    return jsonify({
+        "status": "success",
+        "message": "Email server is running at 5004 port",
+        "version": "1.0.0",
+        "endpoints": {
+            "save_credentials": "/api/email/save-credentials",
+            "validate_credentials": "/api/email/validate-credentials"
+        }
+    })
+
 def validate_email_credentials(email, app_password):
     """Validate email credentials by attempting to connect to Gmail's IMAP server"""
     try:
