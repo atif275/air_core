@@ -1,6 +1,6 @@
 """Chatbot module for handling user interactions."""
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from ..attributes_management.attributes_management import (
@@ -8,6 +8,7 @@ from ..attributes_management.attributes_management import (
     update_person_attributes
 )
 from .router import QueryType, RouterChain
+from .query_splitter import QuerySplitter
 from .agent_manager import AgentManager
 from .memory_manager import MemoryManager
 from .personality_manager import PersonalityManager
@@ -43,6 +44,7 @@ class PersonalizedChatbot:
         
         # Initialize managers in correct order
         self.router = RouterChain(self.llm)
+        self.query_splitter = QuerySplitter(self.llm)
         self.agent_manager = AgentManager(self.llm)
         self.personality_manager = PersonalityManager()
         self.conversation_manager = ConversationManager()
@@ -66,6 +68,55 @@ class PersonalizedChatbot:
             return False
         return True
 
+    def _process_single_agent(self, agent, query_type: QueryType, input_data: Dict, current_person) -> str:
+        """Process a single agent and return its response."""
+        system_logger.log(f"Processing agent for query type: {query_type}")
+        system_logger.log(f"Input data for {query_type} agent: {input_data}")
+
+        # For LangGraph output (TODO)
+        if query_type == QueryType.TODO:
+            thread_id = f"user-{current_person.id}"
+            system_logger.log(f"Processing LangGraph request with thread_id: {thread_id}")
+            result = agent.invoke(
+                {"messages": [{"role": "user", "content": input_data["input"]}]},
+                {"configurable": {"thread_id": thread_id}}
+            )
+            
+            # Extract final AI message content
+            messages = result.get("messages", [])
+            if messages and hasattr(messages[-1], "content"):
+                response = messages[-1].content
+            else:
+                response = "No valid response generated."
+                system_logger.log("No valid response generated from LangGraph", "WARNING")
+        
+        # For FILE agent (HTTP wrapper)
+        elif query_type == QueryType.FILE:
+            system_logger.log("Processing FILE agent request via HTTP wrapper")
+            response = agent(input_data)
+
+        # Email agent: extract input string
+        elif query_type == QueryType.EMAIL or query_type == QueryType.WHATSAPP or query_type == QueryType.VISION:
+            system_logger.log(f"Processing {query_type} request")
+            response = agent(input_data["input"])
+
+        # LangChain agent: use .invoke()
+        elif hasattr(agent, "invoke"):
+            system_logger.log("Processing LangChain agent request")
+            response = agent.invoke(input_data)
+
+        # Function-style agent
+        else:
+            system_logger.log("Processing function-style agent request")
+            response = agent(input_data)
+
+        # Extract content if it's a LangChain message object
+        if hasattr(response, "content"):
+            response = response.content
+
+        system_logger.log(f"Response from {query_type} agent: {response}")
+        return response
+
     def get_response(self, user_input: str) -> str:
         system_logger.log(f"Processing user input: {user_input}")
         
@@ -83,19 +134,17 @@ class PersonalizedChatbot:
                 
             # Use the router to determine query type
             try:
-                query_type = self.router.route_query(user_input)
-                system_logger.log(f"Query type determined: {query_type}")
+                query_types = self.router.route_query(user_input)
+                system_logger.log(f"Query types determined: {query_types}")
                 
                 # Handle attribute updates if needed
                 attributes = {}
-                if query_type == QueryType.ATTRIBUTES:
+                if QueryType.ATTRIBUTES in query_types:
                     try:
                         system_logger.log("Processing attribute update")
-                        # Use the imported identify_attributes function
                         attributes = identify_attributes.invoke({
                             "input": {"user_input": user_input}
                         })
-                        # Use the imported update_person_attributes function
                         attributes_updated = update_person_attributes.invoke({
                             "input": {
                                 "person_id": current_person.id,
@@ -118,68 +167,86 @@ class PersonalizedChatbot:
                 )
                 system_logger.log("Created personality prompt")
                 
-                # Prepare input data with context
-                input_data = {
-                    "input": user_input,
-                    "chat_history": self.memory_manager.get_memory(current_person.id).chat_memory.messages if current_person.id in self.memory_manager.get_memory_ids() else [],
-                    "personality_prompt": personality_prompt
-                }
+                # Split the query into parts for each agent
+                query_parts = self.query_splitter.split_query(user_input, query_types)
+                system_logger.log(f"Split query parts: {query_parts}")
                 
-                if query_type == QueryType.ATTRIBUTES:
-                    query_type = QueryType.GENERAL
+                # Initialize the input data
+                agent_responses = {}  # Store responses from each agent
+                previous_response = None
+                previous_agent_type = None
+
+                # Process each agent in sequence
+                for query_part, query_type in query_parts:
+                    system_logger.log(f"Processing {query_type} query: {query_part}")
                     
-                agent = self.agent_manager.get_agent(query_type)
-                if not agent:
-                    system_logger.log(f"No agent found for query type: {query_type}", "ERROR")
-                    return f"No agent found for query type: {query_type}"
+                    if query_type == QueryType.ATTRIBUTES:
+                        query_type = QueryType.GENERAL
 
-                system_logger.log(f"Using agent for query type: {query_type}")
+                    agent = self.agent_manager.get_agent(query_type)
+                    if not agent:
+                        system_logger.log(f"No agent found for query type: {query_type}", "ERROR")
+                        return f"No agent found for query type: {query_type}"
 
-                # For LangGraph output (TODO, FILE)
-                if query_type in [QueryType.TODO, QueryType.FILE]:
-                    thread_id = f"user-{current_person.id}"
-                    system_logger.log(f"Processing LangGraph request with thread_id: {thread_id}")
-                    result = agent.invoke(
-                        {"messages": [{"role": "user", "content": input_data["input"]}]},
-                        {"configurable": {"thread_id": thread_id}}
-                    )
+                    # Prepare input data with context
+                    input_data = {
+                        "input": query_part,
+                        "chat_history": self.memory_manager.get_memory(current_person.id).chat_memory.messages if current_person.id in self.memory_manager.get_memory_ids() else [],
+                        "personality_prompt": personality_prompt
+                    }
                     
-                    # Extract final AI message content
-                    messages = result.get("messages", [])
-                    if messages and hasattr(messages[-1], "content"):
-                        response = messages[-1].content
-                    else:
-                        response = "No valid response generated."
-                        system_logger.log("No valid response generated from LangGraph", "WARNING")
+                    # If we have a previous response, include it in the context
+                    if previous_response:
+                        # For file agent, include the data from previous agent
+                        if query_type == QueryType.FILE:
+                            if previous_agent_type == QueryType.TODO:
+                                input_data["input"] = f"Save this task list to a file:\n{previous_response}"
+                            elif previous_agent_type == QueryType.EMAIL:
+                                input_data["input"] = f"Save this email list to a file:\n{previous_response}"
+                            elif previous_agent_type == QueryType.VISION:
+                                input_data["input"] = f"Save this visual data to a file:\n{previous_response}"
+                        else:
+                            input_data["previous_response"] = previous_response
 
-                # Email agent: extract input string
-                elif query_type == QueryType.EMAIL or query_type == QueryType.WHATSAPP or query_type == QueryType.VISION:
-                    system_logger.log(f"Processing {query_type} request")
-                    response = agent(input_data["input"])
+                    # Process the agent and get response
+                    response = self._process_single_agent(agent, query_type, input_data, current_person)
+                    agent_responses[query_type] = response
+                    previous_response = response
+                    previous_agent_type = query_type
+                    
+                    system_logger.log(f"Agent {query_type} response stored: {response}")
 
-                # LangChain agent: use .invoke()
-                elif hasattr(agent, "invoke"):
-                    system_logger.log("Processing LangChain agent request")
-                    response = agent.invoke(input_data)
+                # Log all agent responses
+                system_logger.log("All agent responses:")
+                for q_type, resp in agent_responses.items():
+                    system_logger.log(f"{q_type}: {resp}")
 
-                # Function-style agent
-                else:
-                    system_logger.log("Processing function-style agent request")
-                    response = agent(input_data)
+                # Safety check: ensure we have at least one response
+                if not agent_responses:
+                    system_logger.log("No agent responses generated", "ERROR")
+                    return "I couldn't generate a response. Please try again."
 
-                # Extract content if it's a LangChain message object
-                if hasattr(response, "content"):
-                    response = response.content
-
-                # Update memory with the interaction
-                self.memory_manager.update_memory(current_person.id, user_input, response)
+                # Update memory with the final interaction
+                # Use the last processed query type, not the original query types
+                final_query_type = list(agent_responses.keys())[-1] if agent_responses else QueryType.GENERAL
+                final_response = agent_responses[final_query_type]
+                
+                # Safety check: ensure we have a valid response
+                if not final_response:
+                    system_logger.log("Final response is empty", "ERROR")
+                    return "I couldn't generate a valid response. Please try again."
+                
+                self.memory_manager.update_memory(current_person.id, user_input, final_response)
 
                 system_logger.log("Response generated successfully")
-                return response
+                return final_response
 
-                
             except Exception as e:
-                system_logger.log(f"Error processing request: {str(e)}", "ERROR")
+                import traceback
+                error_msg = str(e)
+                error_traceback = traceback.format_exc()
+                system_logger.log(f"Error processing request: {error_msg}", "ERROR")
+                system_logger.log(f"Error traceback: {error_traceback}", "ERROR")
                 return "I had trouble processing your request. Please try again."
                 
         except Exception as e:

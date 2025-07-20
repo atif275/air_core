@@ -40,7 +40,7 @@ def identify_attributes(input: IdentifyAttributesInput) -> Dict[str, str]:
         Dict containing identified attributes (name, age, ethnicity, language) and confidence level
     """
     analysis_prompt = f"""
-    Analyze this message and identify if the user is trying to convey their name, age, ethnicity/location, or language.
+    Analyze this message and identify if the user is trying to convey their name, age, ethnicity/location, language, or gender.
     Message: "{input.user_input}"
     
     Respond in valid JSON format with these fields (leave empty if not found):
@@ -49,6 +49,7 @@ def identify_attributes(input: IdentifyAttributesInput) -> Dict[str, str]:
         "age": "extracted age (as string) or empty string",
         "ethnicity": "extracted ethnicity/location or empty string",
         "language": "extracted language or empty string",
+        "gender": "extracted gender (male/female/non-binary) or empty string",
         "confidence": "high or medium or low"
     }}
     
@@ -57,6 +58,7 @@ def identify_attributes(input: IdentifyAttributesInput) -> Dict[str, str]:
     - Age: "I am 25", "I'm 25 years old", "25 years", etc.
     - Ethnicity/Location: Any mention of ethnicity, nationality, region, city, etc.
     - Language: Any mention of languages like "I speak English", "Roman Urdu", "Spanish", etc.
+    - Gender: "I am male", "I'm a woman", "I identify as non-binary", "I'm a man", etc.
     
     Important rules:
     1. Only extract information that is EXPLICITLY stated or very clearly implied
@@ -66,7 +68,12 @@ def identify_attributes(input: IdentifyAttributesInput) -> Dict[str, str]:
        - "I know [language]"
        - "I can speak [language]"
        - "My language is [language]"
-    4. Set confidence to:
+    4. For gender detection, look for phrases like:
+       - "I am [gender]"
+       - "I'm a [gender]"
+       - "I identify as [gender]"
+       - "My gender is [gender]"
+    5. Set confidence to:
        - "high" if the information is explicitly stated
        - "medium" if it's strongly implied
        - "low" if it's weakly implied
@@ -78,7 +85,7 @@ def identify_attributes(input: IdentifyAttributesInput) -> Dict[str, str]:
         return attributes
     except Exception as e:
         print(f"Error analyzing attributes: {str(e)}")
-        return {"name": "", "age": "", "ethnicity": "", "language": "", "confidence": "low"}
+        return {"name": "", "age": "", "ethnicity": "", "language": "", "gender": "", "confidence": "low"}
 
 @tool
 def update_person_attributes(input: UpdatePersonAttributesInput) -> bool:
@@ -115,6 +122,9 @@ def update_person_attributes(input: UpdatePersonAttributesInput) -> bool:
             
         if input.attributes["language"] and input.attributes["confidence"] in ["high", "medium"]:
             updates["language"] = input.attributes["language"]
+        
+        if input.attributes["gender"] and input.attributes["confidence"] in ["high", "medium"]:
+            updates["gender"] = input.attributes["gender"]
         
         # If we have updates to make
         if updates:

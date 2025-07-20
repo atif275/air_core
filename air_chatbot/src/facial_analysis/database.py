@@ -293,3 +293,15 @@ def get_active_person(cursor):
     except Exception as e:
         face_logger.log(f"Error getting active person: {str(e)}", "ERROR")
         return None
+    
+def update_person_gender(cursor, person_id, gender):
+    """Update the gender field for a person in the database"""
+    try:
+        cursor.execute('''
+        UPDATE persons 
+        SET gender = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        ''', (gender, person_id))
+        face_logger.log(f"Updated gender for person ID {person_id} to {gender}", "INFO")
+    except Exception as e:
+        face_logger.log(f"Error updating gender: {str(e)}", "ERROR")

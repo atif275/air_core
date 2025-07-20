@@ -1,9 +1,16 @@
 from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
-from src.task_management.todo_operations import *
-from src.file_system.file_operations import *
 import os
+import sys
 from typing import Dict, Any, Optional, Tuple
+
+# Add the project root to the path for imports
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from src.task_management.todo_operations import *
+from src.file_system.server.remote_connection import *
 
 # Global context store that persists across function calls
 class GlobalContext:
@@ -155,8 +162,14 @@ todo_agent = create_react_agent(
 
 file_agent = create_react_agent(
     model=model,
+    # tools=[
+    #     create_file, read_file, update_file, delete_file, list_current_files,
+    #     list_directories, change_directory, create_directory, remove_directory,
+    #     rename_file, get_file_info, get_current_directory, find_files,
+    #     get_context, update_context
+    # ],
     tools=[
-        create_file, read_file, update_file, delete_file, list_current_files,
+        create_file, read_file, update_file, list_current_files,
         list_directories, change_directory, create_directory, remove_directory,
         rename_file, get_file_info, get_current_directory, find_files,
         get_context, update_context

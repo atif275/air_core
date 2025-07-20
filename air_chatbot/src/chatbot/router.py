@@ -22,9 +22,9 @@ class InteractionHistory:
     def __init__(self, max_size: int = 1):
         self.history = deque(maxlen=max_size)
         
-    def add(self, query: str, response: str, query_type: Optional[QueryType] = None):
+    def add(self, query: str, response: str, query_types: List[QueryType] = None):
         """Add a new interaction to the history."""
-        self.history.append((query, response, query_type))
+        self.history.append((query, response, query_types))
         
     def get_formatted_history(self) -> str:
         """Format the history for the prompt."""
@@ -32,8 +32,8 @@ class InteractionHistory:
             return "No previous interactions."
             
         formatted = []
-        for i, (query, response, query_type) in enumerate(self.history, 1):
-            type_str = f" (Type: {query_type.value})" if query_type else ""
+        for i, (query, response, query_types) in enumerate(self.history, 1):
+            type_str = f" (Types: {', '.join(qt.value for qt in query_types)})" if query_types else ""
             formatted.append(f"Interaction {i}:")
             formatted.append(f"User: {query}")
             formatted.append(f"Assistant: {response}{type_str}")
@@ -49,10 +49,10 @@ class RouterChain:
         
         self.router_prompt = ChatPromptTemplate.from_messages([
             ("system", """
-                IMPORTANT: You must respond with ONLY the type word (one of: whatsapp, todo, file, vision, attributes, email, general) and NOTHING else. Do not include explanations, markdown, or any other text. Your response must be exactly one of these words, in lowercase, with no punctuation or formatting.
+                IMPORTANT: You must respond with ONLY the type words (one or more of: whatsapp, todo, file, vision, attributes, email, general) separated by commas and NOTHING else. Do not include explanations, markdown, or any other text. Your response must be exactly one or more of these words, in lowercase, with no punctuation except commas between types.
 
-                You are an intelligent query router. Your job is to analyze user queries and determine the SINGLE most appropriate type.
-                The possible types are (RESPOND WITH EXACTLY ONE OF THESE LOWERCASE WORDS):
+                You are an intelligent query router. Your job is to analyze user queries and determine ALL appropriate types that need to be executed in sequence.
+                The possible types are (RESPOND WITH ONE OR MORE OF THESE LOWERCASE WORDS, SEPARATED BY COMMAS):
 
                 - whatsapp: For communication intents through instant messaging, including:
                 * Intent to check messages or message status
@@ -91,6 +91,18 @@ class RouterChain:
                 * Intent to handle professional communications
                 * Intent to follow up on email threads
                 * Any communication intent that's formal/professional in nature
+                * ANY request to reply to or respond to emails
+                * ANY request to compose or send emails
+                * ANY request to manage email correspondence
+                * Examples:
+                    - "reply to that email"
+                    - "respond to his message"
+                    - "send him an email"
+                    - "write back to them"
+                    - "reply to him accordingly"
+                    - "respond to that"
+                    - "answer that email"
+                    - "send a response"
 
                 - todo: For task management intents, including:
                 * Intent to create reminders or tasks
@@ -196,9 +208,15 @@ class RouterChain:
                     - "I go by the name David"
                     - "Please call me Emily"
                     - "My name is not correct"
+                    - "I am male"
+                    - "I'm a woman"
+                    - "I identify as non-binary"
+                    - "My gender is female"
+                    - "I'm a man"
                 * Use 'attributes' for ANY personal information update
                 * Use 'attributes' for name changes or corrections
                 * Use 'attributes' for identity-related statements
+                * Use 'attributes' for gender-related statements
                 * The key is the personal information aspect
 
                 - general: For conversational intents, including:
@@ -222,14 +240,43 @@ class RouterChain:
                     - "how do I do Y"
                     - "I will share with you a number in next prompt and i want you to spell it"
 
-                IMPORTANT: Your response must be ONLY the type word (one of: whatsapp, todo, file, vision, attributes, email, general) and NOTHING else. Do not include explanations, markdown, or any other text. Your response must be exactly one of these words, in lowercase, with no punctuation or formatting.
+                IMPORTANT EXAMPLES OF MULTI-INTENT QUERIES:
+                1. "Read the content of info.txt and give a summary to me" → file
+                2. "Read the content of info.txt and send it to me on whatsapp" → file, whatsapp
+                3. "Save all the pending mails in a file" → email, file
+                4. "Save all the pending mails in a file and send it to me on whatsapp" → email, file, whatsapp
+                5. "Save all the pending mails in a file and send it to me on whatsapp and create a todo to call me on whatsapp" → email, file, whatsapp, todo
+                6. "Write what you see in front of you in a file and send it to me on whatsapp" → vision, file, whatsapp
+                7. "Write what you can see in a file" → vision, file
+                8. "Count how many fingers I am showing and send the number to me on whatsapp" → vision, whatsapp
+                9. "Hi. My name is Maaz. I want you to remind me to go for shopping" → attributes, todo
+                10. "Can you please save a summary of our conversation, save it in a file, and email the file to me" → general, file, email
+                11. "Take a photo, analyze it, and send the results to John via email" → vision, email
+                12. "Check my messages and if there's anything from John, create a todo to call him" → whatsapp, todo
+                13. "Send this to both John and Sarah via WhatsApp" → whatsapp
+                14. "Please delete the file in which you saved the whatsapp messages" → file
+                15. "List all my tasks related to emails" → todo
+                16. "Can you see my name written on my shirt?" → vision
+                17. "Save what you see in a file" → vision, file
+
+                IMPORTANT CONTEXT HANDLING RULES:
+                1. If the current query is a continuation of a previous interaction, use the same type(s) as the previous interaction
+                2. If the query is about replying or responding to a previous message/email, use the same type as the previous interaction
+                3. If the query is about following up on a previous task, use the same type as the previous interaction
+                4. If the query is ambiguous but the previous interaction provides context, use that context to determine the type
+                5. Examples of context handling:
+                   - Previous: "Do I have any pending emails?" (email) → Current: "reply to him accordingly" (email)
+                   - Previous: "Check my WhatsApp messages" (whatsapp) → Current: "respond to that" (whatsapp)
+                   - Previous: "Create a task to call John" (todo) → Current: "mark it as done" (todo)
+
+                IMPORTANT: Your response must be ONLY the type words (one or more of: whatsapp, todo, file, vision, attributes, email, general) separated by commas and NOTHING else. Do not include explanations, markdown, or any other text. Your response must be exactly one or more of these words, in lowercase, with no punctuation except commas between types.
                 
                 Previous Interactions Context:
                 {history}
                 
                 Current query: {input}
                 
-                IMPORTANT: Consider the previous interactions when determining the type. If the current query is a continuation of a previous interaction (like spelling a number that was promised in the previous message), use the same type as the previous interaction.
+                IMPORTANT: Consider the previous interactions when determining the types. If the current query is a continuation of a previous interaction (like spelling a number that was promised in the previous message), use the same type as the previous interaction.
                 """), ("human", "{input}")
         ])
         
@@ -244,7 +291,7 @@ class RouterChain:
         )
         system_logger.log("RouterChain initialization complete")
     
-    def route_query(self, query: str, response: str = "") -> QueryType:
+    def route_query(self, query: str, response: str = "") -> List[QueryType]:
         """Route a query, maintaining context for consecutive interactions."""
         system_logger.log(f"Routing query: {query}")
         query = query.lower().strip()
@@ -257,27 +304,29 @@ class RouterChain:
         if hasattr(result, 'content'):
             result = result.content
  
-        # Clean up the response
+        # Clean up the response and split by commas
         result = result.strip().lower()
+        query_types = []
         
-        # Try to match the type string to a QueryType (case-insensitive)
-        query_type = None
-        if result in QueryType.__members__:
-            query_type = QueryType(result)
-        else:
-            # Try case-insensitive match
-            for q_type in QueryType:
-                if result == q_type.value.lower():
-                    query_type = q_type
-                    break
+        # Parse the comma-separated types
+        for type_str in result.split(','):
+            type_str = type_str.strip()
+            if type_str in QueryType.__members__:
+                query_types.append(QueryType(type_str))
+            else:
+                # Try case-insensitive match
+                for q_type in QueryType:
+                    if type_str == q_type.value.lower():
+                        query_types.append(q_type)
+                        break
         
-        # If no valid type found, default to general
-        if not query_type:
-            system_logger.log(f"No valid query type found, defaulting to GENERAL", "WARNING")
-            query_type = QueryType.GENERAL
+        # If no valid types found, default to general
+        if not query_types:
+            system_logger.log(f"No valid query types found, defaulting to GENERAL", "WARNING")
+            query_types = [QueryType.GENERAL]
         
         # Update history with the current interaction
-        self.history.add(query, response, query_type)
-        system_logger.log(f"Query routed to type: {query_type.value}")
+        self.history.add(query, response, query_types)
+        system_logger.log(f"Query routed to types: {[qt.value for qt in query_types]}")
         
-        return query_type
+        return query_types

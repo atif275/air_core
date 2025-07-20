@@ -7,15 +7,34 @@ from ..email_agent.email_chatbot import email_bot
 from ..object_detection.object_detection import detect_objects
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.runnable import RunnablePassthrough
-from .todo_file_agents import todo_agent, file_agent
+from .todo_file_agents import todo_agent
 from .logger import system_logger
 import os
 import sys
+import requests
 
-# Add the root directory to sys.path if not already there
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+# No need for sys.path manipulation with proper imports
+
+def file_agent_wrapper(input_data):
+    """Wrapper for file agent that makes HTTP request to remote agent server"""
+    try:
+        # Make request to the remote agent server
+        response = requests.post(
+            "http://localhost:5003/api/agent/query",
+            json={"query": input_data["input"]},
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result.get("response", "No response from file agent")
+        else:
+            return f"Error: File agent server returned status {response.status_code}"
+            
+    except requests.exceptions.ConnectionError:
+        return "Error: Could not connect to file agent server. Make sure the remote agent server is running on port 5003."
+    except Exception as e:
+        return f"Error communicating with file agent: {str(e)}"
 
 class AgentManager:
     def __init__(self, llm: ChatOpenAI):
@@ -28,7 +47,7 @@ class AgentManager:
             QueryType.EMAIL: email_bot,
             QueryType.VISION: detect_objects,
             QueryType.TODO: todo_agent,
-            QueryType.FILE: file_agent,
+            QueryType.FILE: file_agent_wrapper,
             QueryType.GENERAL: ChatPromptTemplate.from_messages([
                 ("system", "{personality_prompt}"),
                 MessagesPlaceholder(variable_name="chat_history"),

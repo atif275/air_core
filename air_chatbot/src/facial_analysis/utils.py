@@ -106,7 +106,7 @@ def check_face_quality(face_img, landmarks=None, for_registration=False):
         gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
         blur_value = cv2.Laplacian(gray, cv2.CV_64F).var()
         
-        if blur_value < 20:  # Basic check for recognition
+        if blur_value < 15:  # Basic check for recognition
             face_logger.log(f"Face quality check failed: too blurry ({blur_value:.1f})", "INFO")
             return False, "Too blurry"
             
