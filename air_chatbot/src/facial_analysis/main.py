@@ -4,6 +4,7 @@ import time
 import numpy as np
 import sys
 import os
+import glob
 
 # Add the project root to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -160,13 +161,16 @@ def main():
     tracker = FaceTracker()
     face_logger.log("Face tracker initialized", "INFO")
 
-    # Initialize the video capture
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        face_logger.log("Failed to open webcam", "ERROR")
+    # Check if frames directory exists
+    frames_dir = "frames"
+    if not os.path.exists(frames_dir):
+        face_logger.log(f"Frames directory '{frames_dir}' not found. Creating it.", "INFO")
+        os.makedirs(frames_dir, exist_ok=True)
+        face_logger.log(f"Created frames directory: {frames_dir}", "INFO")
+        face_logger.log("Please add image files to the frames directory and restart the application.", "INFO")
         return
 
-    face_logger.log("Video capture initialized", "INFO")
+    face_logger.log("Frames directory initialized", "INFO")
     face_logger.log("System ready for face recognition", "INFO")
 
     # FPS tracking
@@ -177,11 +181,32 @@ def main():
 
     try:
         while True:
-            # Read frame
-            ret, frame = cap.read()
-            if not ret:
-                face_logger.log("Failed to capture frame", "ERROR")
-                break
+            # Get all image files from frames directory
+            image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tiff']
+            frame_files = []
+            for ext in image_extensions:
+                frame_files.extend(glob.glob(os.path.join(frames_dir, ext)))
+                frame_files.extend(glob.glob(os.path.join(frames_dir, ext.upper())))
+            
+            if not frame_files:
+                face_logger.log("No image files found in frames directory. Waiting...", "INFO")
+                time.sleep(5)  # Wait 5 seconds before checking again
+                continue
+
+            # Sort files by modification time (oldest first)
+            frame_files.sort(key=os.path.getmtime)
+            
+            face_logger.log(f"Found {len(frame_files)} image files to process", "INFO")
+
+            # Process each frame file
+            for frame_path in frame_files:
+                face_logger.log(f"Processing frame: {os.path.basename(frame_path)}", "INFO")
+                
+                # Read frame from file
+                frame = cv2.imread(frame_path)
+                if frame is None:
+                    face_logger.log(f"Failed to read frame: {frame_path}", "ERROR")
+                    continue
 
             # Update FPS less frequently
             frame_count += 1
@@ -475,78 +500,14 @@ def main():
                     # Draw status information
                     draw_status(display, tracker.face_tracking, tracker.last_face_id, fps)
 
-            # Show the result
-            cv2.imshow("Hybrid Face Recognition", display if face_images else frame)
-
-            # Key handling
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                face_logger.log("Quit command received", "INFO")
-                break
-            elif key == ord('r'):
-                if face_images:
-                    face_img, bbox, insight_face = face_images[0]
-                    
-                    # Check face quality including pose
-                    is_good_quality, reason = check_face_quality(face_img, insight_face.kps, for_registration=True)
-                    if not is_good_quality:
-                        face_logger.log(f"Cannot register: {reason}", "WARNING")
-                        cv2.putText(frame, f"Cannot register: {reason}",
-                                  (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                                  0.7, (0, 0, 255), 2)
-                        cv2.imshow("Hybrid Face Recognition", frame)
-                        cv2.waitKey(1500)
-                        continue
-                    else:
-                        tracker.last_face_id += 1
-                        name = f"Person_{tracker.last_face_id}"
-                        
-                        # Calculate features
-                        features = calculate_face_features(face_img)
-                        
-                        # Save to database
-                        face_id = save_face(cursor, conn, face_img, name, features)
-
-                        if face_id is not None:
-                            # Update cache
-                            face_features_cache[face_id] = {
-                                'name': name,
-                                'embeddings': [features],
-                                'qualities': [1.0]  # Default quality score for manual registration
-                            }
-                            
-                            # Update active person after manual registration
-                            face_logger.log(f"Manually registered new face as {name} (ID: {face_id})", "INFO")
-                            update_active_person(cursor, face_id)
-                        else:
-                            tracker.last_face_id -= 1
-                            face_logger.log("Failed to save face to database", "ERROR")
-                        
-                        tracker.last_registration_time = current_time
-            elif key == ord('c'):
-                face_logger.log("Clearing database", "INFO")
-                clear_database(cursor, conn)
-                face_features_cache.clear()  # Clear the cache
-                tracker.face_tracking = {}
-                tracker.last_face_id = 0
-            elif key == ord('s'):
-                faces = get_all_faces(cursor)
-                if faces:
-                    face_logger.log("Retrieved saved faces from database", "INFO")
-                    print("Saved faces:")
-                    for face_id, name in faces:
-                        print(f"  {face_id}: {name}")
-                else:
-                    face_logger.log("No faces found in database", "INFO")
-                    print("No faces saved in database")
+            # Wait before checking for new files
+            time.sleep(2)
 
     except Exception as e:
         face_logger.log(f"Error in main loop: {str(e)}", "ERROR")
         import traceback
         traceback.print_exc()
     finally:
-        cap.release()
-        cv2.destroyAllWindows()
         db_manager.cleanup()  # Clean up all database connections
         face_logger.log("Application terminated", "INFO")
         print("Application terminated.")
