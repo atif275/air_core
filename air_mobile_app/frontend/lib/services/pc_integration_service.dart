@@ -218,7 +218,7 @@ class PCIntegrationService {
 
   void _startStatusCheck() {
     _statusCheckTimer?.cancel();
-    _statusCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    _statusCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       final status = await checkStatus();
       if (status['status'] != 'connected') {
         _stopStatusCheck();

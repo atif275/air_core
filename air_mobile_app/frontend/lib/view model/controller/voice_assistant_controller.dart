@@ -172,23 +172,7 @@ class VoiceAssistantController extends GetxController {
     super.onClose();
   }
 
-  Future<List<ChatEntry>> getChatHistory() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/chat_sessions.json');
-      
-      if (!await file.exists()) {
-        return [];
-      }
 
-      final content = await file.readAsString();
-      final List<dynamic> jsonList = jsonDecode(content);
-      return jsonList.map((json) => ChatEntry.fromJson(json)).toList();
-    } catch (e) {
-      print("Error reading chat history: $e");
-      return [];
-    }
-  }
 
   void toggleTranslation() {
     isEnglishTranslationEnabled.value = !isEnglishTranslationEnabled.value;

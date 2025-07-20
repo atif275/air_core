@@ -8,7 +8,7 @@ import 'package:air/widgets/task_components/task_timeline.dart';
 import 'package:air/widgets/task_components/category_selector.dart';
 import 'package:air/widgets/task_components/summary_card.dart';
 import 'package:air/models/task_model.dart';
-import 'package:air/view_models/task_view_model.dart';
+import 'package:air/view%20model/task_view_model.dart';
 
 class Task2Page extends StatefulWidget {
   const Task2Page({Key? key}) : super(key: key);

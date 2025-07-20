@@ -56,10 +56,39 @@ def save_credentials():
             'app_password': app_password
         }
 
-        # Update .env file
+        # Update .env file - preserve existing content
+        env_lines = []
+        email_updated = False
+        app_password_updated = False
+        
+        # Read existing .env file if it exists
+        if os.path.exists('.env'):
+            with open('.env', 'r') as env_file:
+                env_lines = env_file.readlines()
+        
+        # Update or add EMAIL field
+        for i, line in enumerate(env_lines):
+            if line.strip().startswith('EMAIL='):
+                env_lines[i] = f'EMAIL={email}\n'
+                email_updated = True
+                break
+        
+        # Update or add APP_PASSWORD field
+        for i, line in enumerate(env_lines):
+            if line.strip().startswith('APP_PASSWORD='):
+                env_lines[i] = f'APP_PASSWORD={app_password}\n'
+                app_password_updated = True
+                break
+        
+        # Add new fields if they don't exist
+        if not email_updated:
+            env_lines.append(f'EMAIL={email}\n')
+        if not app_password_updated:
+            env_lines.append(f'APP_PASSWORD={app_password}\n')
+        
+        # Write back to .env file
         with open('.env', 'w') as env_file:
-            env_file.write(f'EMAIL_USER={email}\n')
-            env_file.write(f'EMAIL_PASSWORD={app_password}\n')
+            env_file.writelines(env_lines)
 
         return jsonify({
             'status': 'success',

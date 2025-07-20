@@ -215,7 +215,31 @@ def send_message(contact_name, message_text):
 
         message_box.send_keys(Keys.ENTER)
         print(f"Message sent to {contact_name}: {message_text}")
-        return True
+        
+        # Wait a bit for the message to be sent
+        time.sleep(2)
+        
+        # Click the three dots menu in the right column header
+        try:
+            header_menu = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//div[@id='main']//header//button[@data-tab='6' and @aria-label='Menu']"))
+            )
+            header_menu.click()
+            print("Clicked header menu")
+            time.sleep(1)
+            
+            # Click Close chat option
+            close_chat = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//span[text()='Close chat']"))
+            )
+            close_chat.click()
+            print("Closed chat")
+            time.sleep(1)
+            
+            return True
+        except Exception as e:
+            print(f"Error closing chat: {e}")
+            return False
 
     except NoSuchElementException:
         print(f"Contact {contact_name} not found.")
@@ -387,10 +411,10 @@ def recv_agent():
                         save_received_message(contact_name, received_time, message_text, unread_count)
                         current_unread_contacts.add(contact_name)
                         
-                        # # Forward the message if it's not an event
-                        if not event_message:
-                            print(f"Attempting to forward message from {contact_name}")
-                            forward_recent_message_to(driver, contact_name, "xyz")  # Replace "Test Contact" with actual recipient
+                        # # # Forward the message if it's not an event
+                        # if not event_message:
+                        #     print(f"Attempting to forward message from {contact_name}")
+                        #     forward_recent_message_to(driver, contact_name, "xyz")  # Replace "Test Contact" with actual recipient
                 
                 except Exception as e:
                     print("Error extracting details from chat container:", e)

@@ -3,68 +3,133 @@ import numpy as np
 import os
 from datetime import datetime
 from PIL import Image
+import serial
+import time
+import threading
+
+# Threaded video stream for RTSP (Wyze cam)
+class VideoStream:
+    def __init__(self, src):
+        self.cap = cv2.VideoCapture(src)
+        self.ret, self.frame = self.cap.read()
+        self.stopped = False
+        self.lock = threading.Lock()
+        threading.Thread(target=self.update, daemon=True).start()
+
+    def update(self):
+        while not self.stopped:
+            ret, frame = self.cap.read()
+            with self.lock:
+                self.ret, self.frame = ret, frame
+
+    def read(self):
+        with self.lock:
+            return self.ret, self.frame
+
+    def release(self):
+        self.stopped = True
+        self.cap.release()
 
 # Load OpenCV's pre-trained Haar Cascade for face detection
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-# Camera stream code only
+# Camera selection
+print("Select camera mode:")
+print("1: Built-in webcam")
+print("2: Wyze cam (RTSP)")
+mode = input("Enter 1 or 2: ").strip()
+
 camera_indices = [0, 1, 2]
 cap = None
+stream = None
+using_stream = False
 
-for camera_index in camera_indices:
-    print(f"Trying camera index: {camera_index}")
-    cap = cv2.VideoCapture(camera_index)
-    if cap.isOpened():
-        ret, frame = cap.read()
-        if ret and frame is not None:
-            print(f"Successfully opened camera at index {camera_index}")
-            print(f"Frame shape: {frame.shape}")
-            print(f"Frame type: {frame.dtype}")
-            break
+if mode == '1':
+    for camera_index in camera_indices:
+        print(f"Trying camera index: {camera_index}")
+        cap = cv2.VideoCapture(camera_index)
+        if cap.isOpened():
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                print(f"Successfully opened camera at index {camera_index}")
+                print(f"Frame shape: {frame.shape}")
+                print(f"Frame type: {frame.dtype}")
+                break
+            else:
+                print(f"Camera {camera_index} opened but failed to read frame")
+                cap.release()
         else:
-            print(f"Camera {camera_index} opened but failed to read frame")
+            print(f"Failed to open camera at index {camera_index}")
             cap.release()
+elif mode == '2':
+    wyze_url = "rtsp://Atif:27516515@192.168.1.6/live"
+    print(f"Connecting to Wyze cam at {wyze_url}")
+    stream = VideoStream(wyze_url)
+    time.sleep(2)  # Let the stream warm up
+    ret, frame = stream.read()
+    if ret and frame is not None:
+        print(f"Successfully opened Wyze cam stream")
+        print(f"Frame shape: {frame.shape}")
+        print(f"Frame type: {frame.dtype}")
+        using_stream = True
     else:
-        print(f"Failed to open camera at index {camera_index}")
-        cap.release()
+        print(f"Failed to open Wyze cam stream")
+        stream.release()
+        stream = None
+else:
+    print("Invalid selection. Exiting.")
+    exit()
 
-if cap is None or not cap.isOpened():
+if (mode == '1' and (cap is None or not cap.isOpened())) or (mode == '2' and (stream is None)):
     print("Error: Could not open any camera. Please check your camera connections and permissions.")
     exit()
 
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+if mode == '1':
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+# Initialize serial connection to Arduino
+# Replace '/dev/tty.usbmodemXXXX' with your actual Arduino port
+ser = serial.Serial('/dev/tty.usbmodem11401', 9600, timeout=1)
+time.sleep(2)  # Wait for Arduino to reset
+last_command = None
 
 # Add these variables at the top (after imports)
 confirmed_face = None
 confirmed_count = 0
 CONFIRM_FRAMES = 15  # Number of consecutive frames to confirm a face
 POSITION_MARGIN = 30  # Margin in pixels to consider the face in the same position
+waiting_for_ready = False
+pending_command = None
 
 while True:
-    success, img = cap.read()
+    if using_stream:
+        success, img = stream.read()
+    else:
+        success, img = cap.read()
     if not success or img is None:
         print("Failed to capture image from camera.")
         break
-
-    # print(f"Captured image shape: {img.shape}")
-    # print(f"Captured image type: {img.dtype}")
 
     # Convert to grayscale for face detection
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-    # Draw a persistent red rectangle in the center (width: half, height: full frame)
+    # Draw a persistent red rectangle in the center
     frame_height, frame_width = img.shape[:2]
-    box_width = frame_width // 2
-    box_height = (frame_height * 4) // 4
+    if mode == '2':  # Wyze cam: smaller box
+        box_width = frame_width // 3
+        box_height = (frame_height * 4) // 4
+    else:  # Built-in webcam: original size
+        box_width = frame_width // 2
+        box_height = (frame_height * 4) // 4
     top_left_x = (frame_width - box_width) // 2
     top_left_y = (frame_height - box_height) // 2
     bottom_right_x = top_left_x + box_width
     bottom_right_y = top_left_y + box_height
     cv2.rectangle(img, (top_left_x, top_left_y), (bottom_right_x, bottom_right_y), (0, 0, 255), 2)
 
-    # Track only the largest face
+    # Only the largest (closest) face is tracked and used for confirmation and movement logging
     largest_face = None
     largest_area = 0
     for (x, y, w, h) in faces:
@@ -95,16 +160,35 @@ while True:
         confirmed_face = None
         confirmed_count = 0
 
-    # Only log movement if the face is confirmed
+    # Command logic: only send 'L' or 'R' if needed, 'M' only if face is gone
+    command = None
     if confirmed_count >= CONFIRM_FRAMES and confirmed_face:
         x, y, w, h = confirmed_face
         face_center_x = x + w // 2
         left_bound = top_left_x
         right_bound = bottom_right_x
         if face_center_x < left_bound:
-            print("move left")
+            command = 'L'
         elif face_center_x > right_bound:
-            print("move right")
+            command = 'R'
+        # If the face is inside the red box, do not send any command (hold position)
+        else:
+            command = None
+    else:
+        command = 'M'  # Move to center if no confirmed face
+
+    # Only send a new command if not waiting for Arduino to finish previous move and command is not None
+    if not waiting_for_ready and command:
+        ser.write((command + '\n').encode())
+        print(f"Sent command: {command}")
+        waiting_for_ready = True
+        pending_command = command
+
+    # Check for Arduino feedback
+    if ser.in_waiting:
+        response = ser.readline().decode().strip()
+        if response == "READY":
+            waiting_for_ready = False
 
     cv2.imshow('Webcam', img)
     
@@ -114,5 +198,9 @@ while True:
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-cap.release()
+if using_stream:
+    stream.release()
+else:
+    cap.release()
 cv2.destroyAllWindows()
+ser.close()

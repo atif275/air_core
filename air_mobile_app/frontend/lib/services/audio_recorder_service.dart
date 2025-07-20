@@ -1,7 +1,7 @@
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'package:flutter_audio_waveforms/flutter_audio_waveforms.dart';
+// import 'package:flutter_audio_waveforms/flutter_audio_waveforms.dart';
 
 class AudioRecorderService {
   final _audioRecorder = AudioRecorder();

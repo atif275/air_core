@@ -73,3 +73,8 @@ Contributions are welcome! Please open an issue or submit a pull request.
 [Specify your app's license here, e.g., MIT License]
 
 ---
+
+
+flutter build ios --release
+
+flutter install --release

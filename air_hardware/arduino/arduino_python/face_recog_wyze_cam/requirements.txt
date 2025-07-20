@@ -18,7 +18,7 @@ requests==2.24.0
 tqdm==4.51.0
 urllib3==1.25.11
 wincertstore==0.2
-
+pyserial
 #pip install opencv-python
 #pip install cmake==3.18.2.post1 
 #pip install https://github.com/Murtaza-Saeed/dlib/raw/master/dlib-19.22.1-cp39-cp39-win_amd64.whl

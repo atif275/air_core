@@ -16,8 +16,8 @@ uint16_t PULSE_BOTTOM = 600;   // End pulse length (e.g., slow speed in the oppo
 uint16_t PULSE_STOP = 800;  // Neutral pulse length for stopping the servo
 
 //jaw
-uint16_t PULSE_START = 800; // Start pulse length (e.g., slow speed in one direction)
-uint16_t PULSE_END = 1050;   // End pulse length (e.g., slow speed in the opposite direction)
+uint16_t PULSE_START = 1200; // Start pulse length (e.g., slow speed in one direction)
+uint16_t PULSE_END = 1450;   // End pulse length (e.g., slow speed in the opposite direction)
 
 // Left Eye Settings
 #define LEFT_EYE_0_MIN 330

@@ -1,7 +1,7 @@
 import requests
 import time
 import uuid
-import pygame
+# import pygame
 import os
 from dotenv import load_dotenv
 from langdetect import detect
@@ -11,7 +11,7 @@ load_dotenv()
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 # Pygame setup
-pygame.mixer.init()
+# pygame.mixer.init()
 
 # Default voice (Rachel)
 ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"

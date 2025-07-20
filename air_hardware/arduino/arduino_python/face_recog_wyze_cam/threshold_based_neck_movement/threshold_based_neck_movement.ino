@@ -10,8 +10,10 @@ const int MAX_RIGHT = 120;          // Fixed limit
 
 // Motor behavior
 const int motorSpeed = 200;         // PWM value (0–255)
-const int stepSize = 20;
-const int moveDelay = 300;          // Delay for each step (milliseconds)
+const int stepSize = 5;             // Smaller step for smoother movement
+const int moveDelay = 80;           // Shorter delay for smoother movement
+const int rampStep = 10;            // PWM ramp increment
+const int rampDelay = 10;           // Delay between ramp steps (ms)
 
 void setup() {
   pinMode(IN3, OUTPUT);
@@ -56,22 +58,37 @@ void loop() {
   }
 }
 
+void rampMotor(int fromSpeed, int toSpeed, int directionPin1, int directionPin2) {
+  int step = (toSpeed > fromSpeed) ? rampStep : -rampStep;
+  for (int speed = fromSpeed; speed != toSpeed; speed += step) {
+    digitalWrite(directionPin1, HIGH);
+    digitalWrite(directionPin2, LOW);
+    analogWrite(ENB, speed);
+    delay(rampDelay);
+  }
+  analogWrite(ENB, toSpeed);
+}
+
 void moveLeft() {
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
-  analogWrite(ENB, motorSpeed);
+  // Ramp up
+  rampMotor(0, motorSpeed, IN3, IN4);
   delay(moveDelay);
+  // Ramp down
+  rampMotor(motorSpeed, 0, IN3, IN4);
   stopMotor();
   position -= stepSize;
+  Serial.println("READY");
 }
 
 void moveRight() {
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, HIGH);
-  analogWrite(ENB, motorSpeed);
+  // Ramp up
+  rampMotor(0, motorSpeed, IN4, IN3);
   delay(moveDelay);
+  // Ramp down
+  rampMotor(motorSpeed, 0, IN4, IN3);
   stopMotor();
   position += stepSize;
+  Serial.println("READY");
 }
 
 void moveToCenter() {
@@ -86,6 +103,7 @@ void moveToCenter() {
     }
   }
   Serial.println("Centered.");
+  Serial.println("READY");
 }
 
 void stopMotor() {
