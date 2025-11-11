@@ -5,8 +5,8 @@ from .router import QueryType
 from ..whatsapp_module.ai_agent_V5 import whatsapp_bot
 from ..email_agent.email_chatbot import email_bot
 from ..object_detection.object_detection import detect_objects
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.schema.runnable import RunnablePassthrough
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnablePassthrough
 from .todo_file_agents import todo_agent
 from .logger import system_logger
 import os

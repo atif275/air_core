@@ -3,7 +3,7 @@ from openai import OpenAI
 import os
 import time
 from dotenv import load_dotenv
-from langchain.memory import ConversationBufferMemory
+from ..chatbot.conversation_memory import ConversationBufferMemory
 from datetime import datetime
 import re
 import warnings

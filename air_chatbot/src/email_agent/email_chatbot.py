@@ -6,7 +6,7 @@ import faiss
 import numpy as np
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from langchain.memory import ConversationBufferMemory
+from ..chatbot.conversation_memory import ConversationBufferMemory
 from langchain_community.llms import OpenAI
 from sentence_transformers import SentenceTransformer
 

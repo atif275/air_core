@@ -4,8 +4,8 @@ from datetime import datetime
 import threading
 import time
 import json
-from langchain.memory import ConversationBufferMemory
-from langchain.schema import SystemMessage, AIMessage
+from .conversation_memory import ConversationBufferMemory
+from langchain_core.messages import SystemMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from ..database.database import get_database, Person, Active, Conversation
 from .personality_manager import PersonalityManager

@@ -3,9 +3,8 @@ from enum import Enum
 from typing import Dict, Any, Optional, List, Tuple
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain.output_parsers import EnumOutputParser
 from collections import deque
 from .logger import system_logger
 

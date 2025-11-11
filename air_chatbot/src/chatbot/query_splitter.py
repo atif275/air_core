@@ -2,7 +2,7 @@
 import json
 from typing import List, Tuple
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from .router import QueryType
 from .logger import system_logger

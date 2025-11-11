@@ -1,7 +1,7 @@
 """Interface definitions for chatbot components."""
 from typing import Protocol, Optional
 from datetime import datetime
-from langchain.memory import ConversationBufferMemory
+from .conversation_memory import ConversationBufferMemory
 from ..database.database import Person
 
 class IMemoryManager(Protocol):

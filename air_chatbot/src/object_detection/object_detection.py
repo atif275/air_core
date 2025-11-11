@@ -6,7 +6,6 @@ import os
 import glob
 from dotenv import load_dotenv
 import random
-from langchain_core.tools import tool
 
 # Load environment variables
 load_dotenv()
@@ -16,6 +15,8 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Initialize Google AI Studio
 genai.configure(api_key=GOOGLE_API_KEY)
+
+DEFAULT_VISION_MODEL = os.getenv("GOOGLE_VISION_MODEL", "gemini-flash-latest")
 
 def get_latest_frame():
     """ Gets the latest image from the frames folder. """
@@ -74,7 +75,6 @@ def process_frame(frame):
 
     return img_byte_arr
 
-@tool
 def detect_objects(user_question: str) -> str:
     """ Sends the latest frame & user question to Google AI Studio for analysis.
     
@@ -105,7 +105,7 @@ def detect_objects(user_question: str) -> str:
 
     try:
         print("🤖 Sending to Google AI Studio...")
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel(DEFAULT_VISION_MODEL)
         
         # Enhance the prompt to encourage more conversational responses
         enhanced_prompt = f"""
@@ -151,8 +151,19 @@ def detect_objects(user_question: str) -> str:
             return "I'm looking at the image, but I'm having trouble putting my thoughts into words. Could you ask me about something specific in the image?"
 
     except Exception as e:
-        print(f"❌ Error in Google AI Studio processing: {str(e)}")
-        return f"I apologize, but I'm having some trouble analyzing the image right now. The specific issue is: {str(e)}. Could you try again in a moment?"
+        error_text = str(e)
+        print(f"❌ Error in Google AI Studio processing: {error_text}")
+        if "404" in error_text and DEFAULT_VISION_MODEL in error_text:
+            return (
+                "I'm having trouble analyzing the image because the configured vision model "
+                f"'{DEFAULT_VISION_MODEL}' isn't available. You can set a supported model in the "
+                "`GOOGLE_VISION_MODEL` environment variable (run `python -c \"import google.generativeai "
+                "as genai; genai.configure(api_key=...'`)."
+            )
+        return (
+            "I'm having some trouble analyzing the image right now. "
+            f"The specific issue is: {error_text}. Could you try again in a moment?"
+        )
 
 def chatbot():
     """ Runs the chatbot interface for object detection queries. """
