@@ -11,7 +11,7 @@ load_dotenv()
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 # Pygame setup
-pygame.mixer.init()
+# pygame.mixer.init()
 
 # Default voice (Rachel)
 ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"

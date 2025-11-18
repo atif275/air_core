@@ -5,6 +5,11 @@ import inspect
 from datetime import datetime
 from typing import Optional
 from dotenv import load_dotenv
+import sys
+
+# Add parent directory to path for utils import
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.log_rotation import register_log_handler, rotate_log_files, setup_logging
 
 # Load environment variables
 load_dotenv()
@@ -39,15 +44,19 @@ class SystemLogger:
         # System log file handler
         if self.system_logging_enabled:
             system_log_file = os.path.join('logs', 'system.log')
+            setup_logging(system_log_file)
             system_file_handler = logging.FileHandler(system_log_file)
             system_file_handler.setLevel(logging.INFO)
             system_formatter = logging.Formatter('%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s - %(message)s')
             system_file_handler.setFormatter(system_formatter)
             self.logger.addHandler(system_file_handler)
+            register_log_handler(system_log_file, system_file_handler, 'system_logger')
+            self.system_log_file = system_log_file
         
         # Memory log file handler
         if self.memory_logging_enabled:
             memory_log_file = os.path.join('logs', 'memory.log')
+            setup_logging(memory_log_file)
             memory_file_handler = logging.FileHandler(memory_log_file)
             memory_file_handler.setLevel(logging.INFO)
             memory_formatter = logging.Formatter('%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(funcName)s - %(message)s')
@@ -60,6 +69,8 @@ class SystemLogger:
             
             # Prevent propagation to avoid duplicate logs
             self.memory_logger.propagate = False
+            register_log_handler(memory_log_file, memory_file_handler, 'memory_logger')
+            self.memory_log_file = memory_log_file
         
         # Console handler (only if either logging type is enabled)
         console_handler = logging.StreamHandler()
@@ -122,6 +133,13 @@ class SystemLogger:
         
         # Handle the log record
         logger.handle(record)
+    
+    def rotate_logs(self):
+        """Rotate log files if they exceed size limit. Call this periodically."""
+        if self.system_logging_enabled and hasattr(self, 'system_log_file'):
+            rotate_log_files(self.system_log_file)
+        if self.memory_logging_enabled and hasattr(self, 'memory_log_file'):
+            rotate_log_files(self.memory_log_file)
 
 # Create singleton instance
 system_logger = SystemLogger() 

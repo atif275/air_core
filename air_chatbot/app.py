@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from src.chatbot import chatbot
+from src.chatbot.logger import system_logger
 from dotenv import load_dotenv
 import os
+import threading
+import time
 
 # Load environment variables
 load_dotenv()
@@ -44,7 +47,20 @@ def health_check():
         'message': 'Server is running'
     })
 
+def log_rotation_thread():
+    """Background thread to periodically rotate system.log and memory.log"""
+    while True:
+        try:
+            time.sleep(300)  # Check every 5 minutes
+            system_logger.rotate_logs()
+        except Exception as e:
+            print(f"[LOG ROTATION ERROR] {e}")
+
 if __name__ == '__main__':
+    # Start log rotation thread
+    rotation_thread = threading.Thread(target=log_rotation_thread, daemon=True)
+    rotation_thread.start()
+    
     print("🤖 Chatbot server started!")
     print("Listening on http://localhost:5001")
     app.run(

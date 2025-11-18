@@ -178,9 +178,21 @@ def main():
     fps_update_interval = 30  # Update FPS every 30 frames
     start_time = time.time()
     fps = 0.0
+    
+    # Log rotation counter (rotate every ~5 minutes if processing at 30 FPS)
+    rotation_counter = 0
+    rotation_interval = 9000  # ~5 minutes at 30 FPS
 
     try:
         while True:
+            # Rotate logs periodically
+            rotation_counter += 1
+            if rotation_counter >= rotation_interval:
+                try:
+                    face_logger.rotate_logs()
+                except Exception as e:
+                    face_logger.log(f"Log rotation error: {e}", "WARNING")
+                rotation_counter = 0
             # Get all image files from frames directory
             image_extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tiff']
             frame_files = []

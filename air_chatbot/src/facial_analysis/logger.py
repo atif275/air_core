@@ -5,6 +5,11 @@ import inspect
 from datetime import datetime, timedelta
 from typing import Optional
 from dotenv import load_dotenv
+import sys
+
+# Add parent directory to path for utils import
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.log_rotation import register_log_handler, rotate_log_files, setup_logging
 
 # Load environment variables
 load_dotenv()
@@ -28,8 +33,12 @@ class FaceLogger:
         os.makedirs('logs', exist_ok=True)
         
         # File handler for face.log
-        file_handler = logging.FileHandler('logs/face.log')
+        face_log_file = 'logs/face.log'
+        setup_logging(face_log_file)
+        file_handler = logging.FileHandler(face_log_file)
         file_handler.setLevel(logging.INFO)
+        register_log_handler(face_log_file, file_handler, 'face_logger')
+        self.face_log_file = face_log_file
         
         # Console handler
         console_handler = logging.StreamHandler()
@@ -166,6 +175,11 @@ class FaceLogger:
             self.logger.handle(record)
         finally:
             del frame
+    
+    def rotate_logs(self):
+        """Rotate log files if they exceed size limit. Call this periodically."""
+        if hasattr(self, 'face_log_file'):
+            rotate_log_files(self.face_log_file)
 
 # Create a singleton instance
 face_logger = FaceLogger() 
